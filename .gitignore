@@ -1,0 +1,17 @@
+node_modules/
+dist/
+public/engine/
+/parser/bin/
+/launcher/bin/
+/tests/bin/
+**/obj/
+/engine-rust/target/
+/.research/
+/Demos/
+/portable/
+/Fortnite-Replay-Analyzer-Windows-x64/
+/Fortnite-Chest-Analyzer-Windows-x64/
+*.replay
+*.rar
+*.zip
+.env*
