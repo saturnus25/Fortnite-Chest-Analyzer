@@ -24,10 +24,11 @@
 
 ## Quick start
 
-1. Download **Fortnite-Chest-Analyzer-Windows-x64.zip** from the [latest release](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest).
-2. Extract the whole archive and run **Abrir analizador.exe**. It opens the dashboard in your browser on loopback. Keep its window open while using the app. The package includes the runtime and needs no Rust, Node.js, or .NET installation.
-3. Select your replay folder or import files. Folder imports include subfolders. Extract RAR archives first.
-4. Use the **Language** selector next to the CSV and JSON buttons to choose **English** or **Español**. The browser remembers the choice.
+1. Download the versioned **Windows x64 ZIP** from the [latest release](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest).
+2. Extract the archive and open **Abrir analizador.exe** inside the `Fortnite-Chest-Analyzer-v…` folder. Each release uses its own folder. To extract the same version again, choose a new destination.
+3. Keep the launcher window open while using the dashboard. The package includes the runtime and needs no Rust, Node.js, or .NET installation.
+4. Select your replay folder or import files. Folder imports include subfolders. Extract RAR archives first.
+5. Use the **Language** selector next to the CSV and JSON buttons to choose **English** or **Español**. The browser remembers the choice.
 
 ## How it works
 

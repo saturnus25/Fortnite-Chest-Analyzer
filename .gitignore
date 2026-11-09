@@ -11,6 +11,7 @@ public/engine/
 /portable/
 /Fortnite-Replay-Analyzer-Windows-x64/
 /Fortnite-Chest-Analyzer-Windows-x64/
+/Fortnite-Chest-Analyzer-v*/
 *.replay
 *.rar
 *.zip

@@ -8,32 +8,15 @@ if (!File.Exists(Path.Combine(root, "index.html")))
     return 1;
 }
 
-using var server = new HttpListener();
-string? url = null;
-for (var port = 18746; port < 18756; port++)
+using var server = StartListener(out var url);
+if (server is null)
 {
-    var address = $"http://127.0.0.1:{port}/";
-    server.Prefixes.Add(address);
-    try
-    {
-        server.Start();
-        url = address;
-        break;
-    }
-    catch (HttpListenerException)
-    {
-        server.Prefixes.Remove(address);
-    }
-}
-
-if (url is null)
-{
-    Console.Error.WriteLine("No se pudo abrir un puerto local entre 18746 y 18755.");
+    Console.Error.WriteLine("No se pudo abrir un puerto local entre 18746 y 18755. / Could not open a local port between 18746 and 18755.");
     return 1;
 }
 
-Console.WriteLine($"Fortnite Replay Analyzer — {url}");
-Console.WriteLine("Cierra esta ventana para detener el servidor local.");
+Console.WriteLine($"Fortnite Chest Analyzer — {url}");
+Console.WriteLine("Cierra esta ventana para detener el servidor local. / Close this window to stop the local server.");
 if (!args.Contains("--no-open", StringComparer.Ordinal))
 {
     try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
@@ -44,6 +27,30 @@ while (true)
 {
     var context = await server.GetContextAsync();
     _ = Serve(context, root);
+}
+
+static HttpListener? StartListener(out string url)
+{
+    for (var port = 18746; port < 18756; port++)
+    {
+        var address = $"http://127.0.0.1:{port}/";
+        var listener = new HttpListener();
+        try
+        {
+            listener.Prefixes.Add(address);
+            listener.Start();
+            url = address;
+            return listener;
+        }
+        catch (HttpListenerException)
+        {
+            // Start can dispose the listener on failure. Try the next port with a fresh instance.
+            listener.Close();
+        }
+    }
+
+    url = string.Empty;
+    return null;
 }
 
 static async Task Serve(HttpListenerContext context, string root)

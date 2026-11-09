@@ -1,6 +1,9 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $root = (Get-Location).Path
+$version = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+if ($version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$') { throw 'Versión de paquete inválida.' }
+$packageName = "Fortnite-Chest-Analyzer-v$version"
 $env:DOTNET_CLI_HOME = Join-Path $root '.research/dotnet'
 $env:NUGET_PACKAGES = Join-Path $root '.research/packages'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
@@ -31,7 +34,20 @@ Copy-Item -LiteralPath 'docs' -Destination 'portable' -Recurse -Force
 Copy-Item -LiteralPath 'INVESTIGACION.md' -Destination 'portable/INVESTIGACION.md' -Force
 Copy-Item -LiteralPath 'LICENSE' -Destination 'portable/LICENSE' -Force
 
-tar.exe -a -c -f Fortnite-Chest-Analyzer-Windows-x64.zip -C portable -- .
-if ($LASTEXITCODE -ne 0) { throw 'Error al empaquetar la aplicación portable.' }
+# Give every entry the same versioned root, including when using "Extract here".
+$portableRoot = (Resolve-Path -LiteralPath 'portable').ProviderPath
+$temporaryZip = Join-Path $root ".research/portable-$([guid]::NewGuid()).zip"
+$archive = [IO.Compression.ZipFile]::Open($temporaryZip, [IO.Compression.ZipArchiveMode]::Create)
+try {
+    Get-ChildItem -LiteralPath $portableRoot -Recurse -File | ForEach-Object {
+        $relativePath = [IO.Path]::GetRelativePath($portableRoot, $_.FullName).Replace('\', '/')
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive, $_.FullName, "$packageName/$relativePath", [IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
+} finally {
+    $archive.Dispose()
+}
+Move-Item -LiteralPath $temporaryZip -Destination (Join-Path $root "$packageName-Windows-x64.zip") -Force
 
 
