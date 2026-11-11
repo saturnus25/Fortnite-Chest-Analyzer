@@ -7,20 +7,12 @@
 [![License](https://img.shields.io/badge/License-GPL--3.0--or--later-567aa7?style=for-the-badge)](LICENSE)
 [![Languages](https://img.shields.io/badge/Language-English%20%7C%20Espa%C3%B1ol-4b6070?style=for-the-badge)](README.es.md)
 
-[Download for Windows](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest) · [How it works](#how-it-works) · [Español](README.es.md) · [Report an issue](https://github.com/saturnus25/Fortnite-Chest-Analyzer/issues)
+[Download](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest) · [Quick start](#quick-start) · [Overlay](#chest-overlay) · [Ideas](https://github.com/saturnus25/Fortnite-Chest-Analyzer/discussions/categories/ideas) · [Issues](https://github.com/saturnus25/Fortnite-Chest-Analyzer/issues) · [Español](README.es.md)
 
 > [!NOTE]
 > **AI-assisted development.** OpenAI Codex helped implement, translate, and document this project. The replay reader was checked against a private set of 100 Fortnite 43.00 recordings, with 99 analyzed and one marked unsupported. The preview below uses synthetic data. The project is independent of Epic Games.
 
 ![Portable dashboard showing the overlay launcher and chest activity with synthetic data](docs/dashboard-v1.3.0.png)
-
-## What you can see
-
-| Chests and dispensers | Squad activity |
-| :--- | :--- |
-| Openings, breaks, and loot cannon shots are counted separately. Compare chests per match, view the internal container class, and distinguish observed supply drops from recorded openings. | Switch between your squad and everything captured by the replay. Sort player stats by any numeric column and browse the Epic display names recorded for each account. |
-| **Loot and gizmos** | **Local workflow** |
-| See linked loot, unresolved sources, extraction consumables, and identified gizmo wheel actors. The report keeps pickup status and source evidence separate. | Import folders, individual `.replay` files, or ZIP archives. Export and reimport JSON or CSV. English and Spanish can be switched without clearing the analysis. |
 
 ## Quick start
 
@@ -29,6 +21,14 @@
 3. Keep the launcher window open while using the dashboard. The package includes the runtime and needs no Rust, Node.js, or .NET installation. When finished, click **Stop local servers**, confirm, and close the browser tab when prompted.
 4. Select your replay folder or import files. Folder imports include subfolders. Extract RAR archives first.
 5. Use the **Language** selector next to the CSV and JSON buttons to choose **English** or **Español**. The browser remembers the choice.
+
+## What you can see
+
+| Chests and dispensers | Squad activity |
+| :--- | :--- |
+| Openings, breaks, and loot cannon shots are counted separately. Compare chests per match, view the internal container class, and distinguish observed supply drops from recorded openings. | Switch between your squad and everything captured by the replay. Sort player stats by any numeric column and browse the Epic display names recorded for each account. |
+| **Loot and gizmos** | **Local workflow** |
+| See linked loot, unresolved sources, extraction consumables, and identified gizmo wheel actors. The report keeps pickup status and source evidence separate. | Import folders, individual `.replay` files, or ZIP archives. Export and reimport JSON or CSV. English and Spanish can be switched without clearing the analysis. |
 
 ## How it works
 

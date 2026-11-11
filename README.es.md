@@ -7,20 +7,12 @@
 [![Licencia](https://img.shields.io/badge/Licencia-GPL--3.0--or--later-567aa7?style=for-the-badge)](LICENSE)
 [![Idiomas](https://img.shields.io/badge/Idioma-Espa%C3%B1ol%20%7C%20English-4b6070?style=for-the-badge)](README.md)
 
-[Descargar para Windows](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest) · [Cómo funciona](#cómo-funciona) · [English](README.md) · [Informar de un problema](https://github.com/saturnus25/Fortnite-Chest-Analyzer/issues)
+[Descargar](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest) · [Empezar](#empezar) · [Overlay](#overlay-de-cofres) · [Ideas](https://github.com/saturnus25/Fortnite-Chest-Analyzer/discussions/categories/ideas) · [Problemas](https://github.com/saturnus25/Fortnite-Chest-Analyzer/issues) · [English](README.md)
 
 > [!NOTE]
 > **Desarrollo asistido por IA.** OpenAI Codex ayudó a implementar, traducir y documentar el proyecto. El lector se comprobó con un lote privado de 100 repeticiones de Fortnite 43.00. Se analizaron 99 y una quedó marcada como incompatible. La captura usa datos sintéticos. El proyecto es independiente de Epic Games.
 
 ![Dashboard portable con el botón del overlay y la actividad de cofres, con datos sintéticos](docs/dashboard-v1.3.0.png)
-
-## Qué puedes consultar
-
-| Cofres y dispensadores | Actividad del escuadrón |
-| :--- | :--- |
-| Separa aperturas, rupturas y disparos de cañón. Compara cofres por partida, consulta la clase interna de cada contenedor y distingue las entregas observadas de sus aperturas. | Cambia entre tu escuadrón y todo lo que captó la repetición. Ordena las estadísticas por cualquier columna numérica y consulta los nombres de Epic registrados para cada cuenta. |
-| **Botín y artilugios** | **Trabajo local** |
-| Consulta botín vinculado, orígenes sin resolver, consumibles de extracción y actores de artilugio identificados. El informe conserva por separado el estado de recogida y la evidencia del origen. | Importa carpetas, archivos `.replay` o ZIP. Exporta y vuelve a abrir JSON y CSV. Cambia entre español e inglés con el análisis abierto. |
 
 ## Empezar
 
@@ -29,6 +21,14 @@
 3. Mantén la ventana del lanzador abierta mientras usas la web. El paquete incluye el entorno de ejecución y funciona sin instalar Rust, Node.js ni .NET. Al terminar, pulsa **Cerrar servidores locales**, confirma y cierra la pestaña cuando aparezca el aviso.
 4. Selecciona tu carpeta de repeticiones o importa archivos. El selector recorre las subcarpetas. Si tienes un RAR, extrae primero su contenido.
 5. Usa **Idioma**, junto a los botones CSV y JSON, para elegir **Español** o **English**. El navegador recuerda la elección.
+
+## Qué puedes consultar
+
+| Cofres y dispensadores | Actividad del escuadrón |
+| :--- | :--- |
+| Separa aperturas, rupturas y disparos de cañón. Compara cofres por partida, consulta la clase interna de cada contenedor y distingue las entregas observadas de sus aperturas. | Cambia entre tu escuadrón y todo lo que captó la repetición. Ordena las estadísticas por cualquier columna numérica y consulta los nombres de Epic registrados para cada cuenta. |
+| **Botín y artilugios** | **Trabajo local** |
+| Consulta botín vinculado, orígenes sin resolver, consumibles de extracción y actores de artilugio identificados. El informe conserva por separado el estado de recogida y la evidencia del origen. | Importa carpetas, archivos `.replay` o ZIP. Exporta y vuelve a abrir JSON y CSV. Cambia entre español e inglés con el análisis abierto. |
 
 ## Cómo funciona
 
