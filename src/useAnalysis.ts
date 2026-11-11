@@ -17,7 +17,8 @@ export function formatNotice(notice: Exclude<Notice, string>, t: Translator) {
   return notice.duplicates ? `${complete} · ${t('{count} duplicados excluidos', { count: notice.duplicates })}.` : `${complete}.`
 }
 
-type Task = Input & { entry?: number; sourceId?: string }
+type ReplayInput = { path: string; size: number; load: () => Promise<File>; modifiedAt?: number }
+type Task = ReplayInput & { entry?: number; sourceId?: string }
 type Outcome = Exclude<WorkerReply, { entries: unknown }>
 const base = new URL(import.meta.env.BASE_URL, window.location.href).href
 export const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -34,14 +35,22 @@ function laneCount(files: number) {
 
 export function useAnalysis() {
   const [results, setResults] = useState<Result[]>([])
+  const resultsRef = useRef<Result[]>([])
   const [progress, setProgress] = useState<Progress | null>(null)
   const [message, setMessage] = useState<Notice>('')
   const running = useRef<Set<WorkerClient> | null>(null)
   const cancelled = useRef(false)
 
-  async function analyze(inputs: Input[]) {
+  async function analyze(inputs: (Input | ReplayInput)[], options?: {
+    reset?: boolean; maxWorkers?: number; completedOnly?: boolean; onProgress?: (done: number) => void; compact?: (result: Result) => Result
+  }) {
     if (running.current) return
+    if (options?.reset) {
+      resultsRef.current = []
+      setResults([])
+    }
     if (!inputs.length) {
+      if (options?.reset) return resultsRef.current
       setMessage('No se encontraron archivos .replay, ZIP, CSV o JSON. Para importar un RAR, extrae primero sus archivos.')
       return
     }
@@ -51,9 +60,9 @@ export function useAnalysis() {
     const clients = new Set([listing])
     running.current = clients
     cancelled.current = false
-    const hashes = new Set(results.filter(r => r.status !== 'error').flatMap(r => r.hash ? [r.hash] : []))
-    const guids = new Set(results.filter(valid).flatMap(r => r.guid ? [r.guid.toLowerCase()] : []))
-    const importKeys = new Set(results.filter(valid).flatMap(r => r.importKey ? [r.importKey] : []))
+    const hashes = new Set(resultsRef.current.filter(r => r.status !== 'error').flatMap(r => r.hash ? [r.hash] : []))
+    const guids = new Set(resultsRef.current.filter(valid).flatMap(r => r.guid ? [r.guid.toLowerCase()] : []))
+    const importKeys = new Set(resultsRef.current.filter(valid).flatMap(r => r.importKey ? [r.importKey] : []))
     const queued: Task[] = []
     const ready = new Map<number, Outcome>()
     const active = new Map<number, string>()
@@ -61,14 +70,17 @@ export function useAnalysis() {
     let done = 0
     let cursor = 0
     let nextResult = 0
-    const append = (result: Result) => setResults(old => [...old, result])
+    const append = (result: Result) => {
+      resultsRef.current = [...resultsRef.current, options?.compact?.(result) ?? result]
+      setResults(resultsRef.current)
+    }
     const errorRow = (file: string, size: number, detail: string) =>
       append({ key: crypto.randomUUID(), file, size, detail, status: 'error', chests: [], items: [] })
 
     function commit(index: number, outcome: Outcome) {
       const input = queued[index]
       if ('error' in outcome) {
-        errorRow(input.path, input.entry === undefined ? input.file.size : 0, outcome.error)
+        errorRow(input.path, input.entry === undefined ? input.size : 0, outcome.error)
         return
       }
       if ('report' in outcome) {
@@ -78,10 +90,15 @@ export function useAnalysis() {
         return
       }
       const { result, hash, size } = outcome
-      register({ ...result, key: crypto.randomUUID(), file: input.path, size, hash })
+      register({ ...result, key: crypto.randomUUID(), file: input.path, size, hash,
+        ...(input.modifiedAt === undefined ? {} : { fileModifiedAt: input.modifiedAt }) })
     }
 
     function register(entry: Result) {
+      if (options?.completedOnly && entry.live) {
+        append({ ...entry, status: 'error', chests: [], items: [] })
+        return
+      }
       const guid = entry.guid?.toLowerCase()
       const copy = entry.hash && hashes.has(entry.hash) || entry.importKey && importKeys.has(entry.importKey)
       if (entry.status !== 'duplicate' && (copy || valid(entry) && guid && guids.has(guid))) {
@@ -108,9 +125,11 @@ export function useAnalysis() {
         updateProgress()
         let outcome: Outcome
         try {
+          const file = await input.load()
+          if (cancelled.current) return
           const reply = await client.run(isReport(input.path) && input.entry === undefined
-            ? { command: 'report', file: input.file }
-            : { command: 'replay', file: input.file, entry: input.entry, sourceId: input.sourceId, knownHashes: [...hashes], base })
+            ? { command: 'report', file }
+            : { command: 'replay', file, entry: input.entry, sourceId: input.sourceId, knownHashes: [...hashes], base })
           outcome = 'entries' in reply ? { error: 'Respuesta inesperada del analizador.' } : reply
         } catch (error) {
           outcome = { error: errorText(error) }
@@ -118,6 +137,7 @@ export function useAnalysis() {
         active.delete(index)
         if (cancelled.current) return
         done++
+        options?.onProgress?.(done)
         ready.set(index, outcome)
         // Dispatch in parallel, commit in input order so the original wins over any copies.
         while (ready.has(nextResult)) {
@@ -131,23 +151,26 @@ export function useAnalysis() {
     try {
       for (const input of inputs) {
         if (cancelled.current) break
-        if (!/\.zip$/i.test(input.path)) { queued.push(input); continue }
+        const source = 'file' in input ? { path: input.path, size: input.file.size, load: () => Promise.resolve(input.file) } : input
+        if (!/\.zip$/i.test(source.path)) { queued.push(source); continue }
         setProgress({ done: 0, total: 0, file: input.path, phase: 'scan', active: 1 })
         const sourceId = crypto.randomUUID()
         try {
-          const reply = await listing.run({ command: 'list', file: input.file, sourceId })
+          const file = await source.load()
+          const reply = await listing.run({ command: 'list', file, sourceId })
           if (cancelled.current) break
           if ('error' in reply) throw new Error(reply.error)
           if (!('entries' in reply) || !reply.entries.length) throw new Error('El ZIP no contiene repeticiones.')
           for (const entry of reply.entries) queued.push({
-            file: input.file, path: `${input.path} › ${entry.path}`, entry: entry.index, sourceId,
+            ...source, load: () => Promise.resolve(file), path: `${input.path} › ${entry.path}`, entry: entry.index, sourceId,
           })
         } catch (error) {
-          if (!cancelled.current) errorRow(input.path, input.file.size, errorText(error))
+          if (!cancelled.current) errorRow(source.path, source.size, errorText(error))
         }
       }
       if (!cancelled.current && queued.length) {
-        for (let i = 1; i < laneCount(queued.length); i++) clients.add(new WorkerClient())
+        const lanes = Math.min(laneCount(queued.length), options?.maxWorkers ?? Infinity)
+        for (let i = 1; i < lanes; i++) clients.add(new WorkerClient())
         await Promise.all([...clients].map(work))
       }
       // A cancelled earlier file may have held already finished results behind it.
@@ -158,6 +181,7 @@ export function useAnalysis() {
       setProgress(null)
       setMessage({ kind: 'batch', done, duplicates, cancelled: cancelled.current })
     }
+    return resultsRef.current
   }
 
   function cancel() {

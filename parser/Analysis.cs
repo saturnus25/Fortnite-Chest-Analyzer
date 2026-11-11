@@ -23,6 +23,7 @@ public sealed class Analysis
     public string RecordedAt { get; set; }
     public bool? Encrypted { get; set; }
     public bool? Compressed { get; set; }
+    public bool Live { get; set; }
     public int Frames { get; set; }
     public int SkippedPackets { get; set; }
     public int ChestActorsObserved { get; set; }

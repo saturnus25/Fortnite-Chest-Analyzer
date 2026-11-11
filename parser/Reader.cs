@@ -95,6 +95,7 @@ public sealed class Reader : ReplayReader<Replay>
                 info.Timestamp.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
             _result.Encrypted = info.IsEncrypted;
             _result.Compressed = info.IsCompressed;
+            _result.Live = info.IsLive;
         }
         if (Replay.Header is { } header)
         {

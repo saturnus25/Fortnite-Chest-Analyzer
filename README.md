@@ -1,6 +1,6 @@
 # Fortnite Chest Analyzer
 
-**A local replay dashboard for Fortnite chests, loot, and squad activity.**
+**A local Fortnite replay dashboard and Windows overlay for chests, loot, and squad activity.**
 
 [![Latest release](https://img.shields.io/github/v/release/saturnus25/Fortnite-Chest-Analyzer?style=for-the-badge&label=Latest%20release&logo=github&color=69a95f)](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest)
 [![Windows x64](https://img.shields.io/badge/Portable-Windows%20x64-0078d4?style=for-the-badge)](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest)
@@ -12,7 +12,7 @@
 > [!NOTE]
 > **AI-assisted development.** OpenAI Codex helped implement, translate, and document this project. The replay reader was checked against a private set of 100 Fortnite 43.00 recordings, with 99 analyzed and one marked unsupported. The preview below uses synthetic data. The project is independent of Epic Games.
 
-![Portable dashboard showing the local shutdown button and the chest activity breakdown with synthetic data](docs/dashboard-v1.2.0.png)
+![Portable dashboard showing the overlay launcher and chest activity with synthetic data](docs/dashboard-v1.3.0.png)
 
 ## What you can see
 
@@ -25,7 +25,7 @@
 ## Quick start
 
 1. Download the versioned **Windows x64 ZIP** from the [latest release](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest).
-2. Extract the archive and open **Abrir analizador.exe** inside the `Fortnite-Chest-Analyzer-v…` folder. Each release uses its own folder. To extract the same version again, choose a new destination.
+2. Extract the archive. Open **Abrir analizador.exe** for the dashboard or **Abrir overlay.exe** for the standalone overlay.
 3. Keep the launcher window open while using the dashboard. The package includes the runtime and needs no Rust, Node.js, or .NET installation. When finished, click **Stop local servers**, confirm, and close the browser tab when prompted.
 4. Select your replay folder or import files. Folder imports include subfolders. Extract RAR archives first.
 5. Use the **Language** selector next to the CSV and JSON buttons to choose **English** or **Español**. The browser remembers the choice.
@@ -35,6 +35,17 @@
 React and TypeScript render the dashboard. A Rust reader compiled to WebAssembly processes recordings across up to four Web Workers. The legacy .NET WebAssembly reader provides a fallback for other replay protocols. The Windows launcher serves static files over loopback. Replays and imported reports stay on the device, and the analysis requires no account or upload.
 
 **Validated format.** Fortnite `43.00`, replay container `7`, network header `19`, and engine protocol `45`. Later or older builds may yield partial or unsupported results. Local recordings only capture the actors and changes replicated to the recording client. A gizmo actor sighting does not establish who used it or when it was obtained. **Pirate Shop Access.** The reward panel checks the replicated chest prize for the exact template `DelilahPrize:PirateAccount`. Two different reward templates were decoded from real replays. The positive Pirate Shop case was tested with synthetic data and still needs a real recording containing the token. See the [format and validation notes](INVESTIGACION.md) for the evidence rules, coverage, and upstream sources.
+
+## Chest overlay
+
+![Chest overlay showing history, session counts, averages, treasures, and rankings with synthetic data](docs/overlay-v1.3.0.png)
+
+Run **Abrir overlay.exe** to open the marker and its controls. Standalone mode runs the shared replay analyzer through Windows WebView2. The **Chest overlay** button in the dashboard also works while that tab remains open. In the controls, choose the replay folder, position the marker, and select the counters. You can minimize the controls while playing. The marker passes mouse input through and cannot take focus. Closing the controls closes the marker.
+
+- **Session** covers matches completed since the overlay was opened. **History** covers all matches read while the overlay has been open, including replays that Fortnite has since removed from the folder.
+- **Averages** divides each group's openings by the matches where that group could be identified. Choose recorder, teammates only, or the full squad independently. A dash means the count or average is undetermined.
+- Toggle each section independently for session and history. **Treasures** distinguishes squad rewards, reward records across the replay, and observed gizmos. **Player rankings** shows the latest recorded Epic name for each verified account. Use **Ranking size** to choose 1–12 players.
+- Drag **Marker size** to scale the whole marker. **Fixed width** and **Fixed height** set its dimensions at 100%. The cards adapt to the space available.
 
 ### Reading the dashboard
 

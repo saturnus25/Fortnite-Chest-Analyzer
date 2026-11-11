@@ -38,12 +38,12 @@ export type Analysis = {
   status: Status; detail: string | null; engine?: 'rust' | 'legacy'; legacyRequired?: boolean
   branch?: string | null; build?: number; fileVersion?: number; networkVersion?: number
   engineNetworkVersion?: number; guid?: string | null; durationMs?: number
-  recordedAt?: string | null; encrypted?: boolean; compressed?: boolean
+  recordedAt?: string | null; encrypted?: boolean; compressed?: boolean; live?: boolean
   frames?: number; skippedPackets?: number; chestActorsObserved?: number; recorderName?: string
   squad?: SquadMember[]; squadEvidence?: string | null; recorderTeam?: number | null
   chests: Opening[]; items: Loot[]; containers?: Record<string, ContainerCounts>; supplyDrops?: SupplyDrop[]; gizmos?: GizmoObservation[]; treasures?: TreasureAward[]; schema?: Record<string, string[]>; events?: string[]
 }
-export type Result = Analysis & { key: string; file: string; size: number; hash?: string; source?: 'report'; importKey?: string }
+export type Result = Analysis & { key: string; file: string; size: number; hash?: string; source?: 'report'; importKey?: string; fileModifiedAt?: number }
 export type Input = { file: File; path: string }
 export type Job =
   | { command: 'report'; file: File }

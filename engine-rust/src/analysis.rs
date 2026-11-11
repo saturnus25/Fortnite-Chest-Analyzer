@@ -43,6 +43,7 @@ pub struct Analysis {
     pub guid: Option<String>,
     pub duration_ms: Option<u32>,
     pub recorded_at: Option<String>,
+    pub live: Option<bool>,
     pub encrypted: Option<bool>,
     pub compressed: Option<bool>,
     pub frames: u32,
@@ -65,6 +66,7 @@ pub struct Analysis {
     #[serde(skip_serializing_if = "RewardProbe::is_empty")]
     pub(crate) reward_probe: RewardProbe,
 }
+
 
 #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
 #[derive(Default, Serialize)]

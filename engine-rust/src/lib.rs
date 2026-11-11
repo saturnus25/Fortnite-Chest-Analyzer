@@ -75,6 +75,7 @@ fn read(bytes: &[u8], result: &mut Analysis, network: &mut Option<Network>) -> W
     result.build = Some(file.u32()?);
     file.skip_string()?;
     let live = file.u32()? != 0;
+    result.live = Some(live);
     result.recorded_at = recorded_at(file.u64()?);
     let compressed = file.u32()? != 0;
     let encrypted = file.u32()? != 0;
