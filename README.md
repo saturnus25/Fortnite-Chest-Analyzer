@@ -12,7 +12,7 @@
 > [!NOTE]
 > **AI-assisted development.** OpenAI Codex helped implement, translate, and document this project. The replay reader was checked against a private set of 100 Fortnite 43.00 recordings, with 99 analyzed and one marked unsupported. The preview below uses synthetic data. The project is independent of Epic Games.
 
-![Dashboard preview showing chest averages, container activity, and supply drop counts with synthetic data](docs/dashboard.png)
+![Portable dashboard showing the local shutdown button and the chest activity breakdown with synthetic data](docs/dashboard-v1.2.0.png)
 
 ## What you can see
 

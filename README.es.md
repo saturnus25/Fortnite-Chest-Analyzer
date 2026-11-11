@@ -12,7 +12,7 @@
 > [!NOTE]
 > **Desarrollo asistido por IA.** OpenAI Codex ayudó a implementar, traducir y documentar el proyecto. El lector se comprobó con un lote privado de 100 repeticiones de Fortnite 43.00. Se analizaron 99 y una quedó marcada como incompatible. La captura usa datos sintéticos. El proyecto es independiente de Epic Games.
 
-![Vista del panel con medias de cofres, actividad por contenedor y entregas, con datos sintéticos](docs/dashboard.png)
+![Panel portable con el botón de cierre de servidores y el desglose de actividad de cofres, con datos sintéticos](docs/dashboard-v1.2.0.png)
 
 ## Qué puedes consultar
 
