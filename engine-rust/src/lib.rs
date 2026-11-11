@@ -1,4 +1,6 @@
 mod analysis;
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+mod fast_array;
 mod names;
 mod network;
 mod wire;
@@ -145,17 +147,29 @@ fn read(bytes: &[u8], result: &mut Analysis, network: &mut Option<Network>) -> W
                 } else {
                     network.read_frames(data, result)?;
                 }
+                #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+                {
+                    result.reward_probe.network_chunks += 1;
+                }
             }
             3 => {
                 chunk.skip_string()?; // Event id.
                 let group = chunk.string()?;
                 let meta = chunk.string()?;
                 if result.events.len() < 100 && group.len() < 160 && meta.len() < 160 {
-                    result.events.insert(if meta.is_empty() {
+                    let name = if meta.is_empty() {
                         group
                     } else {
                         format!("{group}/{meta}")
-                    });
+                    };
+                    #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+                    if chunk.skip(8).is_ok() && let Ok(size) = chunk.u32() {
+                        let sizes = result.reward_probe.event_payload_sizes.entry(name.clone()).or_default();
+                        if sizes.len() < 8 {
+                            sizes.insert(size);
+                        }
+                    }
+                    result.events.insert(name);
                 }
             }
             _ => {} // Checkpoints and optional chunks.

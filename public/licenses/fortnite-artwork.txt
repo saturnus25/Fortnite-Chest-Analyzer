@@ -1,0 +1,183 @@
+Fortnite item artwork and localized item names
+
+Game build used for identification: ++Fortnite+Release-43.00-CL-59596594
+Spanish names were read from ItemName FText keys and the game's es localization files.
+English names were read from the corresponding ItemName source strings.
+
+Fortnite artwork and text are copyright Epic Games, Inc. and its licensors.
+Epic retains all rights in those materials. This is an unofficial fan project,
+with no endorsement from Epic. The artwork is excluded from the GPL license
+covering the application's source code.
+
+Fan Content Policy: https://legal.epicgames.com/epicgames/fan-art-policy
+Game asset mirror and API: https://fn-api.cc
+API documentation: https://fn-api.cc/docs
+
+Local files and their source images
+
+public/images/gizmos/wid_relicextractor.png
+https://cdn.fn-api.cc/weapons/wid_relicextractor/icon.png
+SHA256 a5da64dc12ecb48c0bc7ff9b4f407cc91174bb4bdbd5d6f015999f522ee52641
+
+public/images/gizmos/wid_luckylocator.png
+https://cdn.fn-api.cc/weapons/wid_luckylocator/icon.png
+SHA256 9f8735e5627533d61d0b1abe86483d9ccd4dc9901b1e627b725e8db6fa000e0b
+
+public/images/gizmos/wid_smugglerextractionkey_gizmo.png
+https://cdn.fn-api.cc/weapons/wid_smugglerextractionkey_gizmo/icon.png
+SHA256 e2c8677f0dae697d920836323bb9506423fcbac52c6d3dd46ef3e72aeff07e58
+
+public/images/gizmos/wid_relicfinder.png
+https://cdn.fn-api.cc/weapons/wid_relicfinder/icon.png
+SHA256 9ce4e3c599ea821758f7eea2b9196431a0d806a6d40c1be5e697a75cba86e415
+
+public/images/gizmos/wid_flameceleb_consumable_s43.png
+https://cdn.fn-api.cc/weapons/wid_flameceleb_consumable_s43/icon.png
+SHA256 96aab605e4de3c58015c80f9154646200b3c79fd26da0d79c046081c03906bd7
+
+public/images/gizmos/wid_relicextractor_consumable.png
+https://cdn.fn-api.cc/weapons/wid_relicextractor_consumable/icon.png
+SHA256 a5da64dc12ecb48c0bc7ff9b4f407cc91174bb4bdbd5d6f015999f522ee52641
+
+public/images/gizmos/wid_extractionsitebooster.png
+https://cdn.fn-api.cc/weapons/wid_extractionsitebooster/icon.png
+SHA256 712d1b895f5141964232ed99c5f9340f8dc38e972fdd7483bb0934c7deac067f
+
+public/images/gizmos/wid_extractionsitebooster_consumable.png
+https://cdn.fn-api.cc/weapons/wid_extractionsitebooster_consumable/icon.png
+SHA256 712d1b895f5141964232ed99c5f9340f8dc38e972fdd7483bb0934c7deac067f
+
+public/images/gizmos/wid_junkfoodbucket_gizmo.png
+https://cdn.fn-api.cc/weapons/wid_junkfoodbucket_gizmo/icon.png
+SHA256 f6507df4c2160a4133c9697a08b7124c7a00725358aecbb476337bae9a510fce
+
+public/images/gizmos/wid_llamasupplydropradiogizmo.png
+https://cdn.fn-api.cc/weapons/wid_llamasupplydropradiogizmo/icon.png
+SHA256 d4dd44a1434cf5f8abf2f73b626530667202966cb595c20ef821427c67de5d97
+
+public/images/gizmos/wid_spicytaco_gizmo.png
+https://cdn.fn-api.cc/weapons/wid_spicytaco_gizmo/icon.png
+SHA256 a16efc4aee13a26a0003df99dd14ef7b53b3a6899acd147a4299800c9162aba1
+
+Localized names and ItemName FText keys
+
+WID_RelicExtractor
+ES: Extractor portátil
+EN: Portable Extractor
+Namespace: empty
+Key: 061B363D401CD8521657F79723CB54DF
+
+WID_LuckyLocator
+ES: Localizador de la suerte
+EN: Lucky Locator
+Namespace: empty
+Key: C858BD8F45ADC2226A543FAB2246FA3E
+
+WID_SmugglerExtractionKey_Gizmo
+ES: Acelerador de extracción
+EN: Extraction Accelerator
+Namespace: empty
+Key: 9B7942DE4A36849EDAD92FA6D0ED6EDE
+
+WID_RelicFinder
+ES: Localizador de espíritus
+EN: Sprite Locator
+Namespace: empty
+Key: 1A5B33684C28D0978CB7A5AEF9FD72A6
+
+WID_FlameCeleb_Consumable_S43
+ES: Fuegos artificiales dorados
+EN: Golden Firework
+Namespace: empty
+Key: DB75C55F414B4162C5E6B98D34B99052
+
+WID_RelicExtractor_Consumable
+ES: Extractor portátil
+EN: Portable Extractor
+Namespace: empty
+Key: 185CAC774C46E0431C28B6B4EA7752CF
+
+WID_ExtractionSiteBooster
+ES: Potenciador de lugar de extracción
+EN: Extraction Site Booster
+Namespace: empty
+Key: 98B0565A4E587114FAC4DD8AF648D4B9
+
+WID_ExtractionSiteBooster_Consumable
+ES: Potenciador de lugar de extracción
+EN: Extraction Site Booster
+Namespace: empty
+Key: 22C5980F4C63E2CAB7149DA63520DD39
+
+WID_JunkFoodBucket_Gizmo
+ES: Calabaza de picoteo
+EN: Snack-O'-Lantern
+Namespace: empty
+Key: 4712ED064DB1941CD5FCEA9C07DA2E7A
+
+WID_LLamaSupplyDropRadioGizmo
+ES: Entrega de suministros de llama
+EN: Llama Supply Drop
+Namespace: empty
+Key: 1C5BCDB543008DA2133EFAB21BBEFFC5
+
+WID_SpicyTaco_Gizmo
+ES: Tacos picantes
+EN: Spicy Taco
+Namespace: empty
+Key: 7C47CC1A445FF8AC52E7729AD67966CE
+
+Spanish localization source files
+FortniteGame/Content/Localization/Fortnite_locchunk30/es/Fortnite_locchunk30.locres
+FortniteGame/Content/Localization/Fortnite_locchunk50/es/Fortnite_locchunk50.locres
+
+Container artwork from the game assets
+public/images/containers/ammo.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FContent%2FUI%2FFoundation%2FTextures%2FIcons%2FAthena%2FT-T-Icon-BR-AmmoBoxMarkIII&maxSize=160
+SHA256 fcebec034c69e1cb6f816039fc58f5b1959813f920810e9e6222dba4a30834fd
+
+public/images/containers/chest.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FContent%2FUI%2FFoundation%2FTextures%2FIcons%2FAthena%2FT-T-Icon-BR-ChestMarkIIIGadget&maxSize=160
+SHA256 09d63bcdc4b64c4782e5446e53c5d660a623ed2e2311443b8f972c878458f12a
+
+public/images/containers/rare.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FContent%2FUI%2FFoundation%2FTextures%2FIcons%2FAthena%2FT-T-Icon-BR-RareChestMarkII&maxSize=160
+SHA256 ff04d58ad01bdfb5736f390e228ae746eb1146dbeff16e1de99aaa8cabd3b87e
+
+public/images/containers/relic.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FRelicChest%2FContent%2FAssets%2FIcons%2FT_Icon_BR_Container_Relic_Chest_ui&maxSize=160
+SHA256 b616eb6961d4b31d278bcbdaaf0511bc2939955792a7eda3f8889b93983be396
+
+public/images/containers/supply.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FContent%2FAthena%2FHUD%2FDiscoverability%2FIcons%2FT_UI_Icon_Reward_SupplyDrop&maxSize=160
+SHA256 223641e8ff50199c188b8acdeb04c9825126eb071e40d2ded2bafa864da91811
+
+public/images/containers/relic-jeweled.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FSpritePosters%2FContent%2FAssets%2FIcons%2FT_Icon_BR_Container_RelicChest_Jeweled_L&maxSize=160
+SHA256 1f2e2582dd318d816989039906ec6116933547c42f91e1f2d96cfac59c26a8de
+
+public/images/containers/relic-cursed.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FSpritePosters%2FContent%2FAssets%2FIcons%2FT_Icon_BR_Container_RelicChest_Cursed_L&maxSize=160
+SHA256 490d4eb4d26ffcfd3931ca14f526bee16b3902a7a57bd79caff97f0b69366d6a
+
+public/images/containers/relic-liquid-gold.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FSpritePosters%2FContent%2FAssets%2FIcons%2FT_Icon_BR_Container_RelicChest_LiquidGold_L&maxSize=160
+SHA256 6fb6f3f2086f06d9cf5e62f76c61436f2871a9886266013a5a7c4c618cb8f60a
+
+public/images/containers/poster.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FSpritePosters%2FContent%2FAssets%2FTextures%2FT_Icon_BR_SpritePosters_MAp_A_ui&maxSize=160
+SHA256 1f506481921a8882e4c25e6c01ba8560b43c60d417ce1a0fad9ae29420922742
+
+public/images/containers/food.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FFNE%2FHermes%2FS33%2FCanyon_Comp%2FContent%2FSetupAssets%2FMaps%2FPPIDs%2FIcons%2FPPID_ST_Canyon_Comp_FoodBox_Produce_Athena_cbfabc76&maxSize=160
+SHA256 7c2c46ad4152c99a8fabc61f4eb0614bfcc8493db3cf5caf487f1e78b7d9b951
+
+public/images/containers/barrel.png
+https://prod.fn-api.cc/v1/images?path=FortniteGame%2FPlugins%2FGameFeatures%2FFNE%2FHermes%2FS33%2FCanyon_Comp%2FContent%2FSetupAssets%2FMaps%2FPPIDs%2FIcons%2FPPID_ST_Canyon_Comp_Barrel_FishingRod_Container_Athena_96f3cb84&maxSize=160
+SHA256 f0b93da776be743619c1803b4366dceec5c55f46a83166e7ccc68bf071a61016
+Container blueprint associations verified from the parsed game packages
+B_Delilah_TieredChest_Relics_Variant1 -> T_Icon_BR_Container_RelicChest_Jeweled_L
+B_Delilah_TieredChest_Relics_Variant2 -> T_Icon_BR_Container_RelicChest_Cursed_L
+B_Delilah_TieredChest_Relics_Variant3 -> T_Icon_BR_Container_RelicChest_LiquidGold_L
+B_Athena_BuriedChest_Chest uses the Chest_Mark_III mesh and shares the standard chest illustration.
+B_Athena_BuriedChest_RelicFinder uses the SM_Container_Relic_Chest mesh and shares the relic chest illustration.

@@ -1,4 +1,4 @@
-import { translate } from './locales'
+import { gameItems } from './gameItems'
 import type { Language } from './locales'
 import type { GizmoKind, Loot, LootCategory, Result } from './types'
 
@@ -11,17 +11,24 @@ export const lootCategories = {
 } satisfies Record<LootCategory, string>
 
 export const gizmoNames = {
-  extractor: 'Extractor portátil',
-  'lucky-locator': 'Localizador de la suerte',
-  'smuggler-key': 'Llave de extracción',
+  "extractor": "Extractor portátil",
+  "lucky-locator": "Localizador de la suerte",
+  "smuggler-key": "Acelerador de extracción",
+  "sprite-locator": "Localizador de espíritus",
+  "golden-firework": "Fuegos artificiales dorados",
+  "site-booster": "Potenciador de lugar de extracción",
+  "snack-lantern": "Calabaza de picoteo",
+  "llama-drop": "Entrega de suministros de llama",
+  "spicy-taco": "Tacos picantes",
 } satisfies Record<GizmoKind, string>
 
-const extractionItems = new Map<string, Pick<Meta, 'name' | 'category'>>([
-  ['++Fortnite+Release-43.00\nwid_relicextractor', { name: gizmoNames.extractor, category: 'gizmo' }],
-  ['++Fortnite+Release-43.00\nwid_luckylocator', { name: gizmoNames['lucky-locator'], category: 'gizmo' }],
-  ['++Fortnite+Release-43.00\nwid_smugglerextractionkey_gizmo', { name: gizmoNames['smuggler-key'], category: 'gizmo' }],
-  ['++Fortnite+Release-43.00\nwid_relicextractor_consumable', { name: 'Extractor portátil', category: 'extraction-consumable' }],
-])
+export const gizmoIcons = Object.fromEntries(gameItems
+  .filter(item => item.category === 'gizmo')
+  .map(item => [item.kind, import.meta.env.BASE_URL + item.icon])) as Record<GizmoKind, string>
+
+const extractionItems = new Map(gameItems.map(item => [
+  '++Fortnite+Release-43.00\n' + item.id.toLowerCase(), item,
+]))
 
 export async function readCatalog(files: File[]): Promise<Catalog> {
   const rows: Meta[] = []
@@ -65,7 +72,7 @@ export function catalogIndex(catalog: Catalog, language: Language = 'es') {
     const known = extractionItems.get(key)
     const icon = row?.icon ? catalog.icons.get(row.icon.toLowerCase())
       : catalog.icons.size ? ['png', 'webp', 'jpg', 'jpeg', 'avif'].map(ext => catalog.icons.get(`${id}.${ext}`)).find(Boolean) : undefined
-    return { name: row?.name ?? (known?.name ? translate(language, known.name) : item.metadata?.name), rarity: row?.rarity ?? item.metadata?.rarity, icon,
+    return { name: row?.name ?? (known?.name ? known.name[language] : item.metadata?.name), rarity: row?.rarity ?? item.metadata?.rarity, icon: icon ?? (known ? import.meta.env.BASE_URL + known.icon : undefined),
       special: row?.special ?? item.metadata?.special, category: known?.category ?? row?.category ?? item.metadata?.category }
   }
 }

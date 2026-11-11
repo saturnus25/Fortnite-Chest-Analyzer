@@ -1,6 +1,6 @@
 // Unreal replay frame, package-map and actor replication decoding.
 // Based on the MIT-licensed Unreal.Core reader by Shiqan and contributors.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::analysis::{Analysis, Kind, Observation, Observer, Position, Update, is_supply_drop};
 use crate::names::name_of;
@@ -58,7 +58,7 @@ pub(crate) struct Network {
     indices: HashMap<u32, usize>,
     guids: HashMap<u32, String>,
     resolved: HashMap<u32, usize>,
-    missing: HashSet<String>,
+    missing: HashMap<String, usize>,
     observer: Observer,
     packet_number: u32,
     reliable_sequence: u32,
@@ -78,7 +78,7 @@ impl Network {
             indices: HashMap::new(),
             guids: HashMap::new(),
             resolved: HashMap::new(),
-            missing: HashSet::new(),
+            missing: HashMap::new(),
             observer: Observer::default(),
             packet_number: 0,
             reliable_sequence: 0,
@@ -96,6 +96,51 @@ impl Network {
 
     pub(crate) fn finish(&self, result: &mut Analysis) {
         self.observer.finish(result, &self.guids);
+        #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+        {
+            result.reward_probe.abilities.finish(&self.guids);
+            for (path, index) in &self.names {
+                let exports = &mut result.reward_probe.acquisition_exports;
+                if path.len() <= 512 && exports.len() < 256 {
+                    let direct_schema = acquisition_reference(path);
+                    let fields: Vec<_> = self.groups[*index]
+                        .fields
+                        .iter()
+                        .flatten()
+                        .filter(|field| {
+                            field.name.len() <= 512
+                                && (direct_schema || acquisition_reference(&field.name))
+                        })
+                        .take(64)
+                        .map(|field| field.name.clone())
+                        .collect();
+                    if !fields.is_empty() {
+                        exports.insert(path.clone(), fields);
+                    }
+                }
+                if reward_reference(path) {
+                    let fields = self.groups[*index]
+                        .fields
+                        .iter()
+                        .flatten()
+                        .take(256)
+                        .map(|field| field.name.clone())
+                        .collect();
+                    result.reward_probe.exports.insert(path.clone(), fields);
+                }
+            }
+            result.reward_probe.references.extend(
+                self.guids
+                    .values()
+                    .filter(|path| {
+                        path.len() <= 512 && (reward_reference(path) || acquisition_reference(path))
+                    })
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .take(512)
+                    .cloned(),
+            );
+        }
     }
 
     pub(crate) fn read_frames(&mut self, bytes: &[u8], result: &mut Analysis) -> WireResult<()> {
@@ -265,7 +310,11 @@ impl Network {
                     if self.guids.len() >= MAX_GUIDS && !self.guids.contains_key(&id) {
                         return Err(Invalid("Límite de objetos de red alcanzado."));
                     }
-                    self.guids.insert(id, path_tail(&path).to_owned());
+                    let tail = path_tail(&path);
+                    if self.guids.get(&id).is_none_or(|current| current != tail) {
+                        self.guids.insert(id, tail.to_owned());
+                        self.resolved.remove(&id);
+                    }
                 }
             }
         }
@@ -309,23 +358,28 @@ impl Network {
             return Some(group);
         }
         let path = self.guids.get(&id)?;
-        if self.missing.contains(path) {
+        // A miss stays valid for the groups already examined. Only inspect newly
+        // exported groups when this object path is referenced again.
+        let start = self.missing.get(path).copied().unwrap_or(0);
+        let groups = &self.groups[start..];
+        if groups.is_empty() {
             return None;
         }
         let trimmed = path.trim_end_matches(|c: char| c.is_ascii_digit() || c == '_');
-        let found = self
-            .groups
+        let found = groups
             .iter()
             .position(|group| path.contains(&group.tail))
-            .or_else(|| {
-                self.groups
-                    .iter()
-                    .position(|group| group.tail.contains(trimmed))
-            });
+            .or_else(|| groups.iter().position(|group| group.tail.contains(trimmed)))
+            .map(|index| start + index);
         if let Some(index) = found {
             self.resolved.insert(id, index);
+            if start > 0 {
+                self.missing.remove(path);
+            }
+        } else if let Some(checked) = self.missing.get_mut(path) {
+            *checked = self.groups.len();
         } else {
-            self.missing.insert(path.clone());
+            self.missing.insert(path.clone(), self.groups.len());
         }
         found
     }
@@ -540,6 +594,43 @@ impl Network {
             let Ok(payload) = bits.slice(size as usize) else {
                 break;
             };
+            #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+            if let Some(path) = self.guids.get(&rep).filter(|path| reward_reference(path)) {
+                if result.build == Some(59_594_394)
+                    && result.engine_network_version == Some(45)
+                    && result.network_version == Some(19)
+                    && matches!(
+                        path.as_str(),
+                        "AbilitySystemComponent" | "FortAbilitySystemComponentAthena"
+                    )
+                {
+                    let location = crate::fast_array::Location {
+                        time,
+                        actor: actor.id,
+                        component: rep,
+                        after_properties: layout,
+                    };
+                    self.probe_ability_fields(
+                        payload,
+                        location,
+                        &mut result.reward_probe.abilities,
+                    );
+                }
+                let key = format!("{}:{path}", if layout { "properties" } else { "custom" });
+                let blocks = &mut result.reward_probe.blocks;
+                if blocks.len() < 512 || blocks.contains_key(&key) {
+                    let entry = blocks
+                        .entry(key)
+                        .or_insert_with(|| crate::analysis::ProbeBlocks {
+                            count: 0,
+                            samples: Vec::new(),
+                        });
+                    entry.count += 1;
+                    if entry.samples.len() < 4 {
+                        entry.samples.push((time, actor.id, payload.left()));
+                    }
+                }
+            }
             if layout && payload.left() > 0 {
                 if let Some(index) = self.group_for(rep) {
                     self.properties(index, actor, payload, time, result)?;
@@ -547,6 +638,39 @@ impl Network {
             }
         }
         Ok(())
+    }
+
+    #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+    fn probe_ability_fields(
+        &self,
+        mut payload: Bits<'_>,
+        location: crate::fast_array::Location,
+        probe: &mut crate::fast_array::AbilityProbe,
+    ) {
+        const GROUP: &str = "/Script/FortniteGame.FortAbilitySystemComponentAthena";
+        const CACHE: &str = "/Script/FortniteGame.FortAbilitySystemComponentAthena_ClassNetCache";
+        let Some((&group, &cache)) = self.names.get(GROUP).zip(self.names.get(CACHE)) else {
+            return;
+        };
+        let group = &self.groups[group];
+        let cache = &self.groups[cache];
+        if location.after_properties && skip_rep_layout(&mut payload).is_err() {
+            return;
+        }
+        let Ok(Some(value)) = ability_field(payload, cache) else {
+            return;
+        };
+        probe.fields += 1;
+        match crate::fast_array::Delta::read(value, |handle| {
+            group
+                .fields
+                .get(handle)?
+                .as_ref()
+                .map(|field| field.name.as_str())
+        }) {
+            Ok(delta) => probe.observe(location, delta, &self.guids),
+            Err(_) => probe.rejected += 1,
+        }
     }
 
     fn content_header(
@@ -655,6 +779,68 @@ impl Network {
     }
 }
 
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+fn skip_rep_layout(payload: &mut Bits<'_>) -> WireResult<()> {
+    payload.bit()?;
+    for _ in 0..128 {
+        if payload.packed()? == 0 {
+            return Ok(());
+        }
+        let size = payload.packed()? as usize;
+        payload.skip(size)?;
+    }
+    Err(Invalid("Límite de propiedades en el diagnóstico."))
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+fn ability_field<'a>(mut payload: Bits<'a>, cache: &Group) -> WireResult<Option<Bits<'a>>> {
+    let mut ability = None;
+    for _ in 0..64 {
+        if payload.left() == 0 {
+            return Ok(ability);
+        }
+        let handle = payload.serialized(cache.fields.len().max(2) as u32)? as usize;
+        let Some(field) = cache.fields.get(handle).and_then(Option::as_ref) else {
+            break;
+        };
+        let size = payload.packed()? as usize;
+        let value = payload.slice(size)?;
+        if field.name == "ActivatableAbilities" && ability.replace(value).is_some() {
+            break;
+        }
+    }
+    Err(Invalid("Encuadre de ClassNetCache no reconocido."))
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+fn acquisition_reference(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [
+        "prize",
+        "gizmo",
+        "pirateshop",
+        "pirateaccount",
+        "treasurehunt",
+        "reward",
+        "client_replicatecontext",
+    ]
+        .iter()
+        .any(|fragment| lower.contains(fragment))
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+fn reward_reference(path: &str) -> bool {
+    [
+        "AbilitySystemComponent",
+        "TreasureHandler",
+        "DelilahTreasureHunt",
+        "GA_Prizes_EventListener",
+        "PrizeEarnedData",
+    ]
+    .iter()
+    .any(|fragment| path.contains(fragment))
+}
+
 fn read_name(bits: &mut Bits<'_>) -> WireResult<String> {
     if bits.bit()? {
         Ok(name_of(bits.packed()?))
@@ -673,5 +859,21 @@ fn spawn_vector(bits: &mut Bits<'_>) -> WireResult<Position> {
         bits.quantized_vector(10.0)
     } else {
         bits.vector(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Network;
+
+    #[test]
+    fn retries_an_object_after_its_group_is_exported() {
+        let mut network = Network::new(0, false);
+        network.guids.insert(3, "Example_C".to_owned());
+        assert_eq!(network.group_for(3), None);
+        let group = network
+            .group(1, "/Game/Example.Example_C".to_owned(), 1)
+            .unwrap();
+        assert_eq!(network.group_for(3), Some(group));
     }
 }

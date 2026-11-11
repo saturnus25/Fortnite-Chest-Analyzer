@@ -55,11 +55,49 @@ pub struct Analysis {
     chests: Vec<Opening>,
     items: Vec<Loot>,
     supply_drops: Vec<SupplyDrop>,
+    containers: BTreeMap<String, ContainerCounts>,
     treasures: Vec<TreasureAward>,
     #[serde(serialize_with = "serialize_gizmos")]
     gizmos: BTreeMap<u32, GizmoObservation>,
     pub schema: BTreeMap<String, BTreeSet<String>>,
     pub events: BTreeSet<String>,
+    #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+    #[serde(skip_serializing_if = "RewardProbe::is_empty")]
+    pub(crate) reward_probe: RewardProbe,
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RewardProbe {
+    pub network_chunks: u32,
+    pub exports: BTreeMap<String, Vec<String>>,
+    pub acquisition_exports: BTreeMap<String, Vec<String>>,
+    pub event_payload_sizes: BTreeMap<String, BTreeSet<u32>>,
+    pub references: BTreeSet<String>,
+    pub blocks: BTreeMap<String, ProbeBlocks>,
+    #[serde(skip_serializing_if = "crate::fast_array::AbilityProbe::is_empty")]
+    pub abilities: crate::fast_array::AbilityProbe,
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+impl RewardProbe {
+    fn is_empty(&self) -> bool {
+        self.network_chunks == 0
+            && self.exports.is_empty()
+            && self.acquisition_exports.is_empty()
+            && self.event_payload_sizes.is_empty()
+            && self.references.is_empty()
+            && self.blocks.is_empty()
+    }
+}
+
+#[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProbeBlocks {
+    pub count: u32,
+    pub samples: Vec<(f32, u32, usize)>,
 }
 
 #[derive(Serialize)]
@@ -131,6 +169,12 @@ impl Analysis {
             "B_RelicExtractor_C" => ("WID_RelicExtractor", "extractor"),
             "B_LuckyLocator_C" => ("WID_LuckyLocator", "lucky-locator"),
             "B_SmugglerExtractionKey_C" => ("WID_SmugglerExtractionKey_Gizmo", "smuggler-key"),
+            "B_RelicFinder_C" => ("WID_RelicFinder", "sprite-locator"),
+            "B_FlameCeleb_BaseWeapon_C" => ("WID_FlameCeleb_Consumable_S43", "golden-firework"),
+            "B_ExtractionSiteBooster_C" => ("WID_ExtractionSiteBooster", "site-booster"),
+            "B_JunkFoodBucket_Gizmo_C" => ("WID_JunkFoodBucket_Gizmo", "snack-lantern"),
+            "B_LlamaSupplyDropRadioGizmo_Weapon_C" => ("WID_LLamaSupplyDropRadioGizmo", "llama-drop"),
+            "B_SpicyTaco_Gizmo_C" => ("WID_SpicyTaco_Gizmo", "spicy-taco"),
             _ => return,
         };
         self.gizmos
@@ -216,7 +260,8 @@ impl Kind {
         if lower.contains("lootcannon") || lower.contains("confetti") {
             return Self::Cannon;
         }
-        if lower.contains("chest")
+        if known_container(name)
+            || lower.contains("chest")
             || [
                 "Tiered_Ammo",
                 "Tiered_Short_Ammo",
@@ -291,6 +336,33 @@ pub(crate) fn is_supply_drop(name: &str) -> bool {
         && !["Balloon", "Llama", "Spawner"]
             .iter()
             .any(|other| name.contains(other))
+}
+
+// Exact gameplay blueprints seen in the replay corpus or verified in 43.00 assets.
+fn known_container(name: &str) -> bool {
+    matches!(
+        name,
+        "Tiered_Chest_Athena"
+            | "AlwaysSpawn_NormalChest"
+            | "AlwaysSpawn_RareChest"
+            | "Tiered_Chest_5_Child"
+            | "B_TieredChest_Relics"
+            | "B_Delilah_TieredChest_Relics_Variant1"
+            | "B_Delilah_TieredChest_Relics_Variant2"
+            | "B_Delilah_TieredChest_Relics_Variant3"
+            | "B_Athena_BuriedChest_Chest"
+            | "B_Athena_BuriedChest_RelicFinder"
+            | "B_SpritePosters_Booty_Chest"
+            | "B_SpritePosters_Booty_Chest_Variant1"
+            | "Tiered_Ammo_Athena"
+            | "Tiered_Short_Ammo_3_Parent"
+            | "FoodBox_Produce_Athena"
+            | "Barrel_FishingRod_Container_Athena"
+            | "Athena_Prop_Recreation_Cooler"
+            | "Athena_Prop_Recreation_Cooler_RandomColor"
+            | "Athena_Prop_Utility_ToolBox_02"
+            | "Athena_Prop_Commerce_CashRegister"
+    )
 }
 
 fn object_size(size: usize) -> bool {
@@ -532,6 +604,17 @@ impl Player {
     }
 }
 
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContainerCounts {
+    detected: usize,
+    opened: Option<usize>,
+    opened_by_squad: usize,
+    opened_by_other: usize,
+    destroyed: Option<usize>,
+    destruction_observed: usize,
+}
+
 struct Chest {
     id: String,
     kind: String,
@@ -542,6 +625,9 @@ struct Chest {
     searcher: Option<(u32, f32)>,
     opening: Option<Event>,
     first_seen: Option<f32>,
+    searchable: bool,
+    observed_open: bool,
+    destroyed: Option<bool>,
     supply_open: bool,
     spawned_pickups: Option<bool>,
 }
@@ -557,6 +643,14 @@ struct Event {
 impl Chest {
     fn observe(&mut self, time: f32, data: &Update, cannon: bool) {
         self.first_seen.get_or_insert(time);
+        if !cannon {
+            self.searchable |=
+                data.searched.is_some() || data.animation.is_some() || data.supply_open.is_some();
+            self.observed_open |= data.searched == Some(true) || data.supply_open == Some(true);
+            if self.destroyed != Some(true) {
+                self.destroyed = data.destroyed.or(self.destroyed);
+            }
+        }
         self.supply_open |= data.supply_open == Some(true);
         if self.spawned_pickups != Some(true) {
             self.spawned_pickups = data.spawned_pickups.or(self.spawned_pickups);
@@ -819,6 +913,9 @@ impl Observer {
                 searcher: None,
                 opening: None,
                 first_seen: None,
+                searchable: false,
+                observed_open: false,
+                destroyed: None,
                 supply_open: false,
                 spawned_pickups: None,
             });
@@ -892,7 +989,34 @@ impl Observer {
         });
         let roster = self.squad(recorder, player, analysis);
         analysis.chest_actors_observed = self.chests.len();
+        let searchable_classes: HashSet<_> = self
+            .chests
+            .iter()
+            .filter(|chest| chest.searchable)
+            .map(|chest| chest.kind.as_str())
+            .collect();
         for chest in &self.chests {
+            if chest.first_seen.is_some()
+                && (searchable_classes.contains(chest.kind.as_str())
+                    || is_supply_drop(&chest.kind)
+                    || known_container(&chest.kind))
+            {
+                let totals = analysis.containers.entry(chest.kind.clone()).or_default();
+                totals.detected += 1;
+                if chest.searchable {
+                    *totals.opened.get_or_insert(0) += usize::from(
+                        chest.observed_open
+                            || chest
+                                .opening
+                                .as_ref()
+                                .is_some_and(|event| event.action == "opened"),
+                    );
+                }
+                if let Some(destroyed) = chest.destroyed {
+                    totals.destruction_observed += 1;
+                    *totals.destroyed.get_or_insert(0) += usize::from(destroyed);
+                }
+            }
             if is_supply_drop(&chest.kind)
                 && let Some(time) = chest.first_seen
             {
@@ -929,6 +1053,15 @@ impl Observer {
             } else {
                 "unknown"
             };
+            if chest.first_seen.is_some() && chest.searchable && event.action == "opened"
+                && let Some(totals) = analysis.containers.get_mut(&chest.kind)
+            {
+                match team_role {
+                    "recorder" | "squad" => totals.opened_by_squad += 1,
+                    "other" => totals.opened_by_other += 1,
+                    _ => {}
+                }
+            }
             analysis.chests.push(Opening {
                 id: chest.id.clone(),
                 kind: chest.kind.clone(),
@@ -1114,7 +1247,24 @@ fn read_display_name(payload: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bits, read_display_name, read_prize_id};
+    use super::{
+        Analysis, Bits, Kind, Observation, Observer, TreasureState, Update, read_display_name,
+        read_prize_id,
+    };
+
+    #[test]
+    fn recognizes_a_gizmo_actor_without_creating_an_acquisition() {
+        let mut result = Analysis::default();
+        result.observe_gizmo(700, 12.0, "B_RelicFinder_C");
+        result.observe_gizmo(700, 15.0, "B_RelicFinder_C");
+        result.observe_gizmo(701, 13.0, "B_RelicFinder_Unknown_C");
+        assert_eq!(result.gizmos.len(), 1);
+        let observation = &result.gizmos[&700];
+        assert_eq!(observation.kind, "sprite-locator");
+        assert_eq!(observation.observed_at, 12.0);
+        assert!(result.treasures.is_empty());
+        assert!(result.chests.is_empty());
+    }
 
     #[test]
     fn decodes_exact_treasure_template() {
@@ -1136,6 +1286,74 @@ mod tests {
             Some("DelilahPrize:PirateAccount")
         );
         assert_eq!(read_prize_id(Bits::new(&bytes, bytes.len() * 8 - 1)), None);
+    }
+
+    #[test]
+    fn counts_container_and_reward_updates_once_per_actor() {
+        let mut observer = Observer::default();
+        let guids = Default::default();
+        for (time, searched, destroyed) in
+            [(1.0, false, false), (2.0, true, false), (3.0, true, true)]
+        {
+            observer
+                .update(
+                    Observation {
+                        actor: 20,
+                        time,
+                        kind: Kind::Chest,
+                        name: "Tiered_Chest_Athena",
+                        position: None,
+                        guids: &guids,
+                    },
+                    Update {
+                        searched: Some(searched),
+                        destroyed: Some(destroyed),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        for time in [2.0, 2.5] {
+            observer
+                .update(
+                    Observation {
+                        actor: 40,
+                        time,
+                        kind: Kind::Treasure,
+                        name: "BGA_DelilahTreasureHuntAnimatedChest",
+                        position: None,
+                        guids: &guids,
+                    },
+                    Update {
+                        prize: Some(TreasureState {
+                            template_id: Some("DelilahPrize:dpid_item10".to_owned()),
+                            source: Some(20),
+                            ..Default::default()
+                        }),
+                        prize_success: true,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        let mut result = Analysis::default();
+        observer.finish(&mut result, &guids);
+        let chest = &result.containers["Tiered_Chest_Athena"];
+        assert_eq!(
+            (
+                chest.detected,
+                chest.opened,
+                chest.destroyed,
+                chest.destruction_observed
+            ),
+            (1, Some(1), Some(1), 1)
+        );
+        assert_eq!(result.treasures.len(), 1);
+        assert_eq!(result.treasures[0].observed_at, 2.0);
+        assert_eq!(
+            result.treasures[0].source_type.as_deref(),
+            Some("Tiered_Chest_Athena")
+        );
     }
 
     #[test]

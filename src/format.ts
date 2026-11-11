@@ -16,7 +16,7 @@ export const playerLabel = (opening: Opening, language: Language = 'es') => open
 export const playerKey = (opening: Opening, key: string) => opening.playerId != null ? [key, opening.playerId].join(':') : 'unknown'
 export const actionLabel = { opened: 'Apertura', broken: 'Ruptura con botín posible', fired: 'Disparo' }
 export const metricDescription = {
-  chestOpened: 'Aperturas de cofres identificados, incluidos los de espíritu y los enterrados.',
+  chestOpened: 'Aperturas de cofres identificados y recogidas de pósteres de espíritus. Incluye cofres enterrados.',
   chestAverage: 'Media de aperturas de cofres, incluidas las partidas con cero aperturas.',
   opened: 'Aperturas de cualquier contenedor, incluidos cofres, cajas de munición y entregas.',
   broken: 'Contenedores destruidos con indicios de que pudieron soltar botín.',

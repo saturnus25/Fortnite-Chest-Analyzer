@@ -15,6 +15,8 @@ if (server is null)
     return 1;
 }
 
+using var shutdown = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\FortniteChestAnalyzer.Shutdown.v1");
+var stopped = Task.Run(() => shutdown.WaitOne());
 Console.WriteLine($"Fortnite Chest Analyzer — {url}");
 Console.WriteLine("Cierra esta ventana para detener el servidor local. / Close this window to stop the local server.");
 if (!args.Contains("--no-open", StringComparer.Ordinal))
@@ -23,11 +25,13 @@ if (!args.Contains("--no-open", StringComparer.Ordinal))
     catch (System.ComponentModel.Win32Exception) { Console.WriteLine("Abre la dirección anterior en el navegador."); }
 }
 
-while (true)
+while (!shutdown.WaitOne(0))
 {
-    var context = await server.GetContextAsync();
-    _ = Serve(context, root);
+    var incoming = server.GetContextAsync();
+    if (await Task.WhenAny(incoming, stopped) == stopped) break;
+    _ = Serve(await incoming, root, url.TrimEnd('/'), shutdown);
 }
+return 0;
 
 static HttpListener? StartListener(out string url)
 {
@@ -53,12 +57,33 @@ static HttpListener? StartListener(out string url)
     return null;
 }
 
-static async Task Serve(HttpListenerContext context, string root)
+static async Task Serve(HttpListenerContext context, string root, string origin, EventWaitHandle shutdown)
 {
     using var response = context.Response;
     var request = context.Request;
     try
     {
+        if (request.IsLocal && request.Url?.AbsolutePath == "/__fortnite_chest_analyzer/shutdown")
+        {
+            response.Headers["Cache-Control"] = "no-store";
+            if (request.HttpMethod == "HEAD")
+            {
+                response.Headers["X-Fortnite-Chest-Analyzer"] = "portable";
+                response.StatusCode = 204;
+                return;
+            }
+            if (request.HttpMethod != "POST" || request.Headers["Origin"] != origin
+                || request.Headers["X-Fortnite-Chest-Analyzer"] != "shutdown")
+            {
+                response.StatusCode = 403;
+                return;
+            }
+            response.StatusCode = 204;
+            response.Close();
+            shutdown.Set();
+            return;
+        }
+
         if (!request.IsLocal || request.HttpMethod is not ("GET" or "HEAD"))
         {
             response.StatusCode = 405;

@@ -1,5 +1,6 @@
 import { actionLabel, statusLabel, trustLabel } from './format'
 import { roles } from './squad'
+import { gizmoNames } from './catalog'
 import type { DisplayName, GizmoObservation, Loot, Opening, Position, Result, SquadMember, Status, TreasureAward } from './types'
 
 type Row = Record<string, unknown>
@@ -90,9 +91,9 @@ function sanitizeGizmo(value: unknown): GizmoObservation {
   const row = obj(value)
   const actor = count(row.actor)
   const kind = row.kind
-  if (actor == null || kind !== 'extractor' && kind !== 'lucky-locator' && kind !== 'smuggler-key')
+  if (actor == null || !Object.hasOwn(gizmoNames, String(kind)))
     throw new Error('Artilugio sin actor o con tipo no compatible.')
-  return { actor, kind, observedAt: times(row.observedAt), class: required(row.class), itemId: required(row.itemId) }
+  return { actor, kind: kind as GizmoObservation['kind'], observedAt: times(row.observedAt), class: required(row.class), itemId: required(row.itemId) }
 }
 
 function sanitizeTreasure(value: unknown): TreasureAward {
@@ -119,6 +120,20 @@ function match(value: unknown): Result {
   const treasures = row.treasures == null ? undefined : list(row.treasures, 20_000).map(sanitizeTreasure)
   if (treasures && new Set(treasures.map(prize => prize.actor)).size !== treasures.length)
     throw new Error('El informe repite actores de premios del tesoro.')
+  const containers = row.containers == null ? undefined : Object.fromEntries(
+    Object.entries(obj(row.containers)).slice(0, 4096).map(([type, value]) => {
+      const entry = obj(value)
+      const detected = count(entry.detected), opened = count(entry.opened), destroyed = count(entry.destroyed)
+      const destructionObserved = count(entry.destructionObserved)
+      const openedBySquad = count(entry.openedBySquad), openedByOther = count(entry.openedByOther)
+      const hasAttribution = entry.openedBySquad != null || entry.openedByOther != null
+      if (!type || type.length > 512 || detected == null || (opened == null ? entry.opened != null : opened > detected)
+        || (hasAttribution && (openedBySquad == null || openedByOther == null || openedBySquad + openedByOther > (opened ?? 0)))
+        || destructionObserved == null || destructionObserved > detected
+        || (destroyed == null ? destructionObserved !== 0 || entry.destroyed != null : destroyed > destructionObserved || destructionObserved === 0))
+        throw new Error('Recuento de contenedores inválido en el informe.')
+      return [type, { detected, opened, destroyed, destructionObserved, openedBySquad: openedBySquad ?? undefined, openedByOther: openedByOther ?? undefined }]
+    }))
   const schema = row.schema == null ? undefined : Object.fromEntries(Object.entries(obj(row.schema)).slice(0, 10_000)
     .map(([key, fields]) => [key, list(fields, 65_536).flatMap(field => string(field, 512) ?? [])]))
   return {
@@ -139,7 +154,7 @@ function match(value: unknown): Result {
         openedAt: drop.openedAt == null ? null : times(drop.openedAt), position: pos(drop.position), spawnedPickups: boolean(drop.spawnedPickups) }
     }),
     gizmos: row.gizmos == null ? undefined : list(row.gizmos, 20_000).map(sanitizeGizmo),
-    treasures,
+    treasures, containers,
     squad: row.squad == null ? [] : list(row.squad, 512).map(sanitizeMember), chests, items, schema,
     events: row.events == null ? undefined : list(row.events, 200).flatMap(event => string(event) ?? []),
   }

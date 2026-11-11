@@ -3,12 +3,15 @@ import { useMemo, useState } from 'react'
 import { Archive, ArrowRight, CircleHelp, FolderOpen, Gem, PackageOpen, Truck, Users, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ActionChart, LootCoverage, MatchChart } from './charts'
+import type { Bars } from './charts'
 import type { Catalog } from './catalog'
-import { categories, chestOpened, containerOf } from './containers'
+import { categories, chestActivityLabels, chestOpened, containerOf } from './containers'
 import type { Category } from './containers'
 import type { Metadata, report } from './data'
 import { metricDescription } from './format'
 import { TreasureReport } from './TreasureReport'
+import { ContainerReport } from './ContainerReport'
+import { GizmoReport } from './GizmoReport'
 import type { Result } from './types'
 import { Metric, MetricGuide, SectionTitle } from './ui'
 
@@ -31,11 +34,19 @@ export function Overview({ data, results, catalog, meta, openCategory, inspect, 
     const matches = scoped ? squadMatches : data.matches
     const counts = new Map(matches.map(match => [match.key, 0]))
     const rows = Object.entries(categories).map(([key, label]) => ({ key, label, counts: { opened: 0, broken: 0, fired: 0 } }))
+    const chestBreakdown = new Map<string, Bars>()
     const byCategory = new Map(rows.map(row => [row.key, row]))
     let chestCount = 0, linked = 0, total = 0
     for (const { match, opening, items } of data.events) {
       if (!counts.has(match.key) || scoped && !['recorder', 'squad'].includes(opening.teamRole)) continue
-      byCategory.get(containerOf(opening.type).category)!.counts[opening.action]++
+      const container = containerOf(opening.type)
+      byCategory.get(container.category)!.counts[opening.action]++
+      if (container.category === 'chest') {
+        const label = container.activityLabel ?? container.label
+        const row = chestBreakdown.get(label) ?? { key: label, label, counts: { opened: 0, broken: 0, fired: 0 } }
+        row.counts[opening.action]++
+        chestBreakdown.set(label, row)
+      }
       total++
       linked += items.length
       if (chestOpened(opening)) {
@@ -47,6 +58,10 @@ export function Overview({ data, results, catalog, meta, openCategory, inspect, 
     return {
       scoped, squadMatches, chestCount, linked, total,
       rows: rows.filter(row => row.key !== 'unknown' || Object.values(row.counts).some(Boolean)),
+      chestBreakdown: chestActivityLabels.flatMap(label => {
+        const row = chestBreakdown.get(label)
+        return row ? [row] : []
+      }),
       points: matches.map(match => ({ match, count: counts.get(match.key)! })),
       drops, covered: data.matches.filter(match => match.supplyDrops !== undefined).length,
       openedDrops: drops.filter(drop => drop.opened).length,
@@ -107,8 +122,11 @@ export function Overview({ data, results, catalog, meta, openCategory, inspect, 
     <div className="insight-grid">
       <MatchChart points={points} inspect={inspect} />
       <ActionChart title={t('Actividad por tipo de contenedor')}
-        subtitle={t('Compara las acciones y pulsa un tipo para ver sus clases')}
-        rows={derived.rows.map(row => ({ ...row, label: t(row.label) }))} onSelect={key => openCategory(key as Category, derived.scoped)} />
+        subtitle={t('Cofres en total suma las aperturas y rupturas de todas sus clases. Los pósteres tienen su propia barra.')}
+        rows={derived.rows.map(row => ({
+          ...row, label: t(row.key === 'chest' ? 'Cofres en total' : row.label),
+          breakdown: row.key === 'chest' ? derived.chestBreakdown.map(chest => ({ ...chest, label: t(chest.label) })) : undefined,
+        }))} onSelect={key => openCategory(key as Category, derived.scoped)} />
     </div>
     <div className="insight-grid secondary-insights">
       <LootCoverage linked={derived.allLinked} total={data.loot.length} inspect={() => openLoot()} />
@@ -123,6 +141,8 @@ export function Overview({ data, results, catalog, meta, openCategory, inspect, 
               : t('Consultar identificaciones y cobertura')}</small></span><ArrowRight size={16} /></button>
       </section>
     </div>
+    <ContainerReport data={data} />
+    <GizmoReport matches={data.matches} />
     <TreasureReport matches={data.matches} catalogMatches={tokens} />
   </>
 }

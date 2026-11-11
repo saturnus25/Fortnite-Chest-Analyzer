@@ -6,7 +6,7 @@ import type { Opening, Result } from './types'
 
 const actions = ['opened', 'broken', 'fired'] as const
 const names = { opened: 'Aperturas', broken: 'Rupturas', fired: 'Disparos' }
-export type Bars = { key: string; label: string; counts: Record<Opening['action'], number> }
+export type Bars = { key: string; label: string; counts: Record<Opening['action'], number>; breakdown?: Bars[] }
 export const actionCount = (row: Bars) => actions.reduce((n, kind) => n + row.counts[kind], 0)
 
 function niceScale(n: number) {
@@ -25,19 +25,23 @@ export function ActionChart({ title, subtitle, rows, onSelect }: {
     <div className="legend">{actions.map(kind => <span key={kind}><i className={kind} />{t(names[kind])}</span>)}</div>
     <div className="chart-axis" aria-hidden="true"><span>0</span><span>{num(max / 2)}</span><span>{num(max)}</span></div>
     <div className="action-chart">
-      {rows.map(row => {
+      {rows.flatMap(row => [{ row, detail: false }, ...(row.breakdown ?? []).map(chest => ({ row: chest, detail: true }))]).map(({ row, detail }) => {
         const total = actionCount(row)
         const description = actions.map(kind => `${t(names[kind])} ${num(row.counts[kind])}`).join(' · ')
         const contents = <>
-          <div className="stack-label"><span>{row.label}</span><strong>{num(total)}</strong></div>
+          <div className="stack-label"><span>{row.label}</span>{detail
+            ? <span className="legend">{actions.filter(kind => kind !== 'fired' || row.counts.fired).map(kind =>
+              <span key={kind} title={t(names[kind])}><i className={kind} />{num(row.counts[kind])}</span>)}</span>
+            : <strong>{row.breakdown ? t('{count} acciones', { count: total }) : num(total)}</strong>}</div>
+          {row.breakdown && <small className="stack-summary">{t('{opened} aperturas · {broken} rupturas', row.counts)}</small>}
           <div className="stack-track" aria-hidden="true">
             {actions.map(kind => <i key={kind} className={kind} style={{ width: `${row.counts[kind] / max * 100}%` }} />)}
           </div>
         </>
-        return onSelect
+        return onSelect && !detail
           ? <button className="stack-row" key={row.key} type="button" onClick={() => onSelect(row.key)}
             aria-label={`${row.label}. ${description}. ${t('Ver detalle.')}`} title={description}>{contents}</button>
-          : <div className="stack-row" key={row.key} role="img" aria-label={`${row.label}. ${description}.`} title={description}>{contents}</div>
+          : <div className={detail ? 'stack-row stack-detail' : 'stack-row'} key={row.key} role="img" aria-label={`${row.label}. ${description}.`} title={description}>{contents}</div>
       })}
     </div>
   </section>

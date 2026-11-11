@@ -22,12 +22,17 @@ export type SupplyDrop = {
   id: string; type: string; observedAt: number; opened: boolean; openedAt: number | null
   position: Position | null; spawnedPickups: boolean | null
 }
-export type GizmoKind = 'extractor' | 'lucky-locator' | 'smuggler-key'
+export type GizmoKind = 'extractor' | 'lucky-locator' | 'smuggler-key' | 'sprite-locator'
+  | 'golden-firework' | 'site-booster' | 'snack-lantern' | 'llama-drop' | 'spicy-taco'
 export type GizmoObservation = { actor: number; observedAt: number; class: string; itemId: string; kind: GizmoKind }
 export type TreasureAward = {
   actor: number; observedAt: number; templateId: string | null
   sourceActor: number | null; sourceType: string | null
   playerId: number | null; player: string | null; fromDestruction: boolean | null
+}
+export type ContainerCounts = {
+  detected: number; opened: number | null; destroyed: number | null; destructionObserved: number
+  openedBySquad?: number; openedByOther?: number
 }
 export type Analysis = {
   status: Status; detail: string | null; engine?: 'rust' | 'legacy'; legacyRequired?: boolean
@@ -36,7 +41,7 @@ export type Analysis = {
   recordedAt?: string | null; encrypted?: boolean; compressed?: boolean
   frames?: number; skippedPackets?: number; chestActorsObserved?: number; recorderName?: string
   squad?: SquadMember[]; squadEvidence?: string | null; recorderTeam?: number | null
-  chests: Opening[]; items: Loot[]; supplyDrops?: SupplyDrop[]; gizmos?: GizmoObservation[]; treasures?: TreasureAward[]; schema?: Record<string, string[]>; events?: string[]
+  chests: Opening[]; items: Loot[]; containers?: Record<string, ContainerCounts>; supplyDrops?: SupplyDrop[]; gizmos?: GizmoObservation[]; treasures?: TreasureAward[]; schema?: Record<string, string[]>; events?: string[]
 }
 export type Result = Analysis & { key: string; file: string; size: number; hash?: string; source?: 'report'; importKey?: string }
 export type Input = { file: File; path: string }

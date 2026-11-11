@@ -2,12 +2,13 @@ import { useI18n } from './i18n'
 import type { Language } from './locales'
 import { useMemo, useState } from 'react'
 import { ArrowRight, Files, ListFilter, Truck, Wrench, X } from 'lucide-react'
-import { gizmoNames, lootCategories } from './catalog'
+import { gizmoIcons, gizmoNames, lootCategories } from './catalog'
 import { categories, chestOpened, containerOf } from './containers'
 import type { Category } from './containers'
 import type { Metadata } from './data'
 import { report } from './data'
 import { actionLabel, clock, date, playerKey, playerLabel, positionLabel, shortFile, statusLabel, trustLabel, typeLabel } from './format'
+import { gizmoFromTemplate, isPirateShopAccess, squadRewardOpenings, squadRewardTemplates } from './treasure'
 import type { LootCategory, Opening, Result } from './types'
 import { SectionTitle, Select, Table } from './ui'
 import { valid } from './useAnalysis'
@@ -37,6 +38,7 @@ export function Matches({ results, selectedKey, select, navigate }: {
         <div><small>{t('Aperturas / rupturas / disparos')}</small><strong>{valid(selected)
           ? ['opened', 'broken', 'fired'].map(kind => selected.chests.filter(c => c.action === kind).length).join(' / ') : '—'}</strong></div>
       </div>
+      <MatchSquadRewards match={selected} />
       {selected.detail && <p className="status-detail">{detail(selected.detail)}</p>}
       {valid(selected) && <div className="detail-actions">
         <button className="button ghost small" type="button" onClick={() => navigate('squad')}>{t('Ver escuadrón')} <ArrowRight size={15} /></button>
@@ -57,6 +59,35 @@ export function Matches({ results, selectedKey, select, navigate }: {
         <td>{valid(r) ? num(r.chests.length) : '—'}</td>
         <td><span className={`pill ${r.status}`} title={r.detail ? detail(r.detail) : undefined}>{t(statusLabel[r.status])}</span>{r.source === 'report' && <small>{t('Informe importado')}</small>}</td></tr>} />
   </>
+}
+
+function MatchSquadRewards({ match }: { match: Result }) {
+  const { t } = useI18n()
+  const rewards = squadRewardOpenings(match)
+  return <section aria-labelledby="match-squad-rewards">
+    <h4 id="match-squad-rewards" className="subheading">{t('Adquisiciones del escuadrón')}</h4>
+    <p className="status-detail">{t('Un premio para cualquier integrante cuenta una vez para el escuadrón. Cada apertura de origen distinta suma una adquisición. El total de la partida puede ser mayor si faltan eventos.')}</p>
+    <div className="detail-grid">
+      {squadRewardTemplates.map(([template, kind]) => {
+        const observed = match.treasures?.some(prize => kind === 'pirate-token'
+          ? isPirateShopAccess(match.branch, prize.templateId)
+          : gizmoFromTemplate(match.branch, prize.templateId) === kind)
+        const openings = rewards.get(kind)
+        return <div key={template}>
+          <small className="gizmo-detail-label">{kind !== 'pirate-token' && <img src={gizmoIcons[kind]} alt="" width={40} height={40} />}
+            {t(kind === 'pirate-token' ? 'Token pirata' : gizmoNames[kind])}</small>
+          <strong>{openings ? t('Adquisiciones observadas · {count}', { count: openings.length }) : t('No determinado')}</strong>
+          <small>{template}</small>
+          {openings ? <details>
+            <summary>{t('Ver aperturas de origen')}</summary>
+            <ul>{openings.map(prize => <li key={prize.sourceActor!}>
+              {t('Actor #{id}', { id: String(prize.sourceActor) })}
+            </li>)}</ul>
+          </details> : observed && <small>{t('Plantilla observada en un premio de cofre')}</small>}
+        </div>
+      })}
+    </div>
+  </section>
 }
 
 export type EvidencePreset = { category?: Category; squad?: boolean; extraction?: boolean }
@@ -208,12 +239,13 @@ function GizmoSightings({ matches, matchKey, search }: { matches: Result[]; matc
     .map(gizmo => ({ match, gizmo })))
   const covered = selected.some(match => match.gizmos !== undefined)
   return <section className="supply-section">
-    <div className="supply-heading"><Wrench size={19} /><div><h3>{t('Artilugios de la rueda observados')}</h3>
+    <div className="supply-heading"><Wrench size={19} /><div><h3>{t('Actores de artilugios observados')}</h3>
       <p>{t('Actores que la repetición llegó a grabar. La primera observación no indica cuándo se obtuvieron o usaron. Solo se aplican los filtros de partida y objeto a esta tabla.')}</p></div></div>
     <Table key={`${matchKey}|${search}`} rows={rows} headers={[t('Artilugio / ID interno'), t('Clase del actor'), t('Partida'), t('Primera observación')]}
       empty={covered ? t('No hay actores de artilugio identificados para esta selección.') : t('Estos informes no incluyen observaciones de artilugios de la rueda.')}
       row={({ match, gizmo }) => <tr key={`${match.key}:${gizmo.actor}`}>
-        <td><strong>{t(gizmoNames[gizmo.kind])}</strong><small>{gizmo.itemId}</small></td>
+        <td><div className="item-cell gizmo-cell"><img src={gizmoIcons[gizmo.kind]} alt="" width={48} height={48} />
+          <span><strong>{t(gizmoNames[gizmo.kind])}</strong><small>{t('ID de catálogo')} · {gizmo.itemId}</small></span></div></td>
         <td>{gizmo.class}</td><td>{shortFile(match.file)}</td><td>{clock(gizmo.observedAt)}</td>
       </tr>} />
   </section>

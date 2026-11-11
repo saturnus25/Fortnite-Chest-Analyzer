@@ -26,7 +26,7 @@
 
 1. Download the versioned **Windows x64 ZIP** from the [latest release](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest).
 2. Extract the archive and open **Abrir analizador.exe** inside the `Fortnite-Chest-Analyzer-v…` folder. Each release uses its own folder. To extract the same version again, choose a new destination.
-3. Keep the launcher window open while using the dashboard. The package includes the runtime and needs no Rust, Node.js, or .NET installation.
+3. Keep the launcher window open while using the dashboard. The package includes the runtime and needs no Rust, Node.js, or .NET installation. When finished, click **Stop local servers**, confirm, and close the browser tab when prompted.
 4. Select your replay folder or import files. Folder imports include subfolders. Extract RAR archives first.
 5. Use the **Language** selector next to the CSV and JSON buttons to choose **English** or **Español**. The browser remembers the choice.
 
@@ -36,7 +36,13 @@ React and TypeScript render the dashboard. A Rust reader compiled to WebAssembly
 
 **Validated format.** Fortnite `43.00`, replay container `7`, network header `19`, and engine protocol `45`. Later or older builds may yield partial or unsupported results. Local recordings only capture the actors and changes replicated to the recording client. A gizmo actor sighting does not establish who used it or when it was obtained. **Pirate Shop Access.** The reward panel checks the replicated chest prize for the exact template `DelilahPrize:PirateAccount`. Two different reward templates were decoded from real replays. The positive Pirate Shop case was tested with synthetic data and still needs a real recording containing the token. See the [format and validation notes](INVESTIGACION.md) for the evidence rules, coverage, and upstream sources.
 
-**Local catalog.** The app accepts a folder with item images and optional `catalogo.json`, `catalog.json`, or `items.json`. Supply the exact `id` and optionally `name`, `rarity`, `icon`, or `branch`. A verified pirate token can be marked with `"special": "pirate-token"` and an exact `branch`. User-provided names and raw game IDs are preserved when switching languages. Existing CSV and JSON report fields retain their original schema.
+### Reading the dashboard
+
+- **Container activity** counts recorded actions in the selected scope. The chest total includes standard, rare, relic, and buried chests. The chart separates fixed and variable spawns, and distinguishes openings from breaks. Sprite Poster pickups have their own row.
+- **Containers by class** covers the whole replay. **Observed open** counts containers recorded in an open state. The table splits that total by your squad, other identified teams, and unknown team. Fixed spawns have a yellow outline. Reanalyze the original replay if an older report lacks this breakdown.
+- **Gizmo rewards** counts recorded rewards across the replay and shows your squad's observed rewards separately. Three records of the same reward from a single opening for your squad count as one squad reward. Two separate openings count as two. **Undetermined** means the replay or report has insufficient evidence to establish the count.
+
+**Local catalog.** The app accepts a folder with item images and optional `catalogo.json`, `catalog.json`, or `items.json`. Supply the exact `id` and optionally `name`, `rarity`, `icon`, or `branch`. A verified pirate token can be marked with `"special": "pirate-token"` and an exact `branch`. User-provided names and raw game IDs are preserved when switching languages.
 
 ## Build from source
 

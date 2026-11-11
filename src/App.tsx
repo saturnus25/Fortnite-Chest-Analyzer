@@ -2,7 +2,7 @@ import { useI18n } from './i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Activity, ArrowDownToLine, BarChart3, ChevronRight, Crosshair, Files, FolderOpen,
-  Gem, HardDrive, Layers3, PackageOpen, ShieldCheck, Upload, Users, X } from 'lucide-react'
+  Gem, HardDrive, Layers3, PackageOpen, Power, ShieldCheck, Upload, Users, X } from 'lucide-react'
 import { catalogIndex, readCatalog } from './catalog'
 import type { Catalog } from './catalog'
 import { exportCsv, exportJson, report } from './data'
@@ -24,6 +24,7 @@ const nav = [
   { id: 'loot', label: 'Botín', Icon: Gem },
 ] as const
 const aliasKey = 'fortnite-replay:aliases'
+const shutdownPath = '/__fortnite_chest_analyzer/shutdown'
 function loadAliases(): Record<string, string> {
   try {
     const entries: unknown = JSON.parse(localStorage.getItem(aliasKey) ?? '{}')
@@ -45,17 +46,43 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [hostState, setHostState] = useState<'unavailable' | 'ready' | 'closing' | 'closed' | 'error'>('unavailable')
   const folder = useRef<HTMLInputElement>(null)
   const files = useRef<HTMLInputElement>(null)
   const assets = useRef<HTMLInputElement>(null)
   const { results, progress, message, setMessage, analyze, cancel } = useAnalysis()
-  const busy = picking || progress !== null
+  const busy = picking || progress !== null || hostState === 'closing' || hostState === 'closed'
 
   useEffect(() => () => { for (const url of catalog.icons.values()) URL.revokeObjectURL(url) }, [catalog])
+  useEffect(() => {
+    if (location.hostname !== '127.0.0.1') return
+    const controller = new AbortController()
+    void fetch(shutdownPath, { method: 'HEAD', cache: 'no-store', signal: controller.signal })
+      .then(response => {
+        if (response.status === 204 && response.headers.get('X-Fortnite-Chest-Analyzer') === 'portable') setHostState('ready')
+      })
+      .catch(() => { /* The static web build does not have a portable launcher. */ })
+    return () => controller.abort()
+  }, [])
   const meta = useMemo(() => catalogIndex(catalog, language), [catalog, language])
   const data = useMemo(() => report(results), [results])
   const labels = useMemo(() => rosterLabels(data.matches, aliases, language), [data.matches, aliases, language])
   const usableMatchKey = data.matches.some(m => m.key === matchKey) ? matchKey : ''
+
+  async function shutdownLocalServers() {
+    if (!window.confirm(t('¿Cerrar los servidores locales de Fortnite Chest Analyzer? Exporta antes los resultados que quieras guardar.'))) return
+    setHostState('closing')
+    try {
+      const response = await fetch(shutdownPath, {
+        method: 'POST', headers: { 'X-Fortnite-Chest-Analyzer': 'shutdown' }, signal: AbortSignal.timeout(5000),
+      })
+      if (response.status !== 204) throw new Error('Shutdown request failed')
+      cancel()
+      setHostState('closed')
+    } catch {
+      setHostState('error')
+    }
+  }
 
   function setAlias(key: string, label: string) {
     const next = { ...aliases }
@@ -124,7 +151,7 @@ export default function App() {
       </div>
     </aside>
     <main>
-      <header className="topbar">
+      <header className={hostState === 'unavailable' ? 'topbar' : 'topbar portable-topbar'}>
         <div className="breadcrumb"><span>{t('Analizador')}</span><ChevronRight size={14} /> <strong>{t(nav.find(n => n.id === view)!.label)}</strong></div>
         <div className="exports">
           <select className="language-select" aria-label={t('Idioma')} value={language}
@@ -137,9 +164,15 @@ export default function App() {
           <button type="button" className="button ghost small" disabled={!results.length} onClick={() => exportJson(results, data, catalog, meta, labels)}>
             <ArrowDownToLine size={15} /> JSON
           </button>
+          {hostState !== 'unavailable' && <button type="button" className="button ghost small" onClick={() => void shutdownLocalServers()}
+            disabled={hostState === 'closing' || hostState === 'closed'}>
+            <Power size={15} /> {t('Cerrar servidores locales')}
+          </button>}
         </div>
       </header>
       <div className="content">
+        {hostState === 'closed' && <p className="notice" role="status"><Power size={16} />{t('Servidores locales cerrados. Ya puedes cerrar esta pestaña.')}</p>}
+        {hostState === 'error' && <p className="notice" role="alert"><Power size={16} />{t('No se pudo confirmar el cierre. Vuelve a intentarlo o cierra las ventanas del lanzador.')}</p>}
         <input ref={folder} hidden type="file" multiple {...{ webkitdirectory: '' }} onChange={fromInput} data-testid="folder-input" />
         <input ref={files} hidden type="file" multiple accept=".replay,.zip,.csv,.json" onChange={fromInput} data-testid="file-input" />
         <input ref={assets} hidden type="file" multiple {...{ webkitdirectory: '' }} onChange={fromAssets} data-testid="asset-input" />
@@ -188,7 +221,7 @@ export default function App() {
           navigate={next => { setPreset(undefined); setView(next) }} />}
         {(view === 'events' || view === 'loot') && <Evidence key={view + (preset?.category ?? '') + (preset?.extraction ? '|extraction' : '')} view={view} data={data} preset={preset}
           matchKey={usableMatchKey} select={setMatchKey} meta={meta} labels={labels} />}
-        <footer><span>Fortnite Chest Analyzer</span><span>{t('Desarrollo asistido por IA')} · {t('Herramienta independiente · Sin afiliación a Epic Games')}</span></footer>
+        <footer><span>Fortnite Chest Analyzer</span><span>{t('Imágenes de Fortnite © Epic Games')} · <a href={import.meta.env.BASE_URL + 'licenses/fortnite-artwork.txt'} target="_blank" rel="noreferrer">{t('Créditos de imágenes')}</a></span><span>{t('Herramienta independiente · Sin afiliación a Epic Games')}</span></footer>
       </div>
     </main>
   </div>

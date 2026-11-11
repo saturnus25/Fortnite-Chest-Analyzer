@@ -26,7 +26,7 @@
 
 1. Descarga el **ZIP para Windows x64** desde la [última release](https://github.com/saturnus25/Fortnite-Chest-Analyzer/releases/latest).
 2. Extrae el archivo y abre **Abrir analizador.exe** dentro de la carpeta `Fortnite-Chest-Analyzer-v…`. Cada release tiene su propia carpeta. Para volver a extraer la misma versión, elige otro destino.
-3. Mantén la ventana del lanzador abierta mientras usas la web. El paquete incluye el entorno de ejecución y funciona sin instalar Rust, Node.js ni .NET.
+3. Mantén la ventana del lanzador abierta mientras usas la web. El paquete incluye el entorno de ejecución y funciona sin instalar Rust, Node.js ni .NET. Al terminar, pulsa **Cerrar servidores locales**, confirma y cierra la pestaña cuando aparezca el aviso.
 4. Selecciona tu carpeta de repeticiones o importa archivos. El selector recorre las subcarpetas. Si tienes un RAR, extrae primero su contenido.
 5. Usa **Idioma**, junto a los botones CSV y JSON, para elegir **Español** o **English**. El navegador recuerda la elección.
 
@@ -36,7 +36,13 @@ React y TypeScript muestran el dashboard. El lector Rust se compila a WebAssembl
 
 **Formato validado.** Fortnite `43.00`, contenedor `7`, cabecera de red `19` y protocolo de motor `45`. Otras versiones pueden devolver resultados parciales o incompatibles. La repetición local solo recoge la actividad replicada al cliente que grabó. La aparición de un actor de artilugio deja sin determinar su uso y obtención. **Pirate Shop Access.** El panel compara la plantilla de premio del cofre con el ID exacto `DelilahPrize:PirateAccount`. Se descodificaron otros dos premios en repeticiones reales. La coincidencia del token se probó con datos sintéticos y queda pendiente validarla con una repetición real que lo contenga. Consulta las [notas de formato y validación](INVESTIGACION.md) para conocer los criterios de evidencia, la cobertura y las fuentes.
 
-**Catálogo local.** Admite una carpeta con imágenes de objetos y un `catalogo.json`, `catalog.json` o `items.json` opcional. Indica el `id` exacto y, cuando estén disponibles, `name`, `rarity`, `icon` o `branch`. Un token pirata verificado se puede marcar con `"special": "pirate-token"` y la rama correspondiente. Los datos aportados por el usuario y los identificadores del juego se conservan al cambiar de idioma. Los campos de los informes CSV y JSON conservan su esquema.
+### Cómo leer el dashboard
+
+- **Actividad por tipo de contenedor** cuenta las acciones registradas en el alcance seleccionado. El total incluye cofres normales, raros, de reliquias y enterrados. La gráfica distingue apariciones fijas y variables, así como aperturas y rupturas. La recogida de pósteres de espíritu tiene su propia fila.
+- **Contenedores por clase** cubre todo el replay. **Vistos abiertos** cuenta los contenedores registrados en estado abierto. La tabla reparte el total entre tu escuadrón, otros equipos identificados y casos sin equipo identificado. Los cofres de aparición fija llevan un borde amarillo. Si un informe antiguo carece del desglose, vuelve a analizar el replay original.
+- **Premios de artilugios** muestra los registros de toda la grabación y los premios observados de tu escuadrón. Tres registros del mismo premio en una sola apertura de tu equipo cuentan como un premio del escuadrón. Dos aperturas distintas cuentan como dos. **No determinado** indica que la repetición o el informe no aportan pruebas suficientes para calcular la cifra.
+
+**Catálogo local.** Admite una carpeta con imágenes de objetos y un `catalogo.json`, `catalog.json` o `items.json` opcional. Indica el `id` exacto y, cuando estén disponibles, `name`, `rarity`, `icon` o `branch`. Un token pirata verificado se puede marcar con `"special": "pirate-token"` y la rama correspondiente. Los datos aportados por el usuario y los identificadores del juego se conservan al cambiar de idioma.
 
 ## Compilar desde el código fuente
 

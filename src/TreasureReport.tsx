@@ -1,25 +1,26 @@
 import { Target } from 'lucide-react'
 import { useI18n } from './i18n'
 import { clock, shortFile, typeLabel } from './format'
-import { isPirateShopAccess, treasureName } from './treasure'
+import { gizmoFromTemplate, isPirateShopAccess, treasureName } from './treasure'
 import type { Result } from './types'
 import { Table } from './ui'
 
 export function TreasureReport({ matches, catalogMatches }: { matches: Result[]; catalogMatches: number }) {
   const { t, language } = useI18n()
   const covered = matches.filter(match => match.treasures !== undefined).length
-  const rows = matches.flatMap(match => (match.treasures ?? []).map(prize => ({ match, prize })))
+  const rows = matches.flatMap(match => (match.treasures ?? [])
+    .filter(prize => !gizmoFromTemplate(match.branch, prize.templateId)).map(prize => ({ match, prize })))
   const pirateMatches = rows.filter(({ match, prize }) => isPirateShopAccess(match.branch, prize.templateId)).length
 
   return <section className="panel insight treasure-report">
     <div className="treasure-header">
-      <div className="panel-title"><Target size={20} /><div><h3>Pirate Shop Access</h3>
-        <p>{t('Token pirata · Todo el replay')}</p></div></div>
+      <div className="panel-title"><Target size={20} /><div><h3>{t('Recompensas especiales')}</h3>
+        <p>Pirate Shop Access · {t('Todo el replay')}</p></div></div>
       <span className={`pill ${pirateMatches ? 'complete' : 'neutral'}`}>{pirateMatches
         ? t('{count} coincidencias de plantilla', { count: pirateMatches })
         : covered ? t('Sin coincidencias en lo grabado') : t('Sin datos de premios')}</span>
     </div>
-    <p>{t('El token se identifica por la plantilla de premio exacta. El replay registra el evento del cofre y la cuenta del jugador se verifica en Fortnite.')}</p>
+    <p>{t('La plantilla exacta identifica el premio en la repetición. La acreditación en la cuenta de Epic queda sin determinar.')}</p>
     <p className="treasure-template"><code>DelilahPrize:PirateAccount</code> · {t('{count} partidas con lectura de premios', { count: covered })}</p>
     {catalogMatches > 0 && <p>{t('{count} coincidencias de catálogo en objetos del suelo, registradas por separado.', { count: catalogMatches })}</p>}
     {rows.length > 0 && <details className="treasure-details">
