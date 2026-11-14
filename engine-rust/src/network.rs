@@ -19,6 +19,8 @@ struct Field {
 
 struct Group {
     name: String,
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    cache_name: String,
     tail: String,
     schema_key: String,
     schema_started: bool,
@@ -39,6 +41,8 @@ struct Bunch {
     channel: usize,
     open: bool,
     close: bool,
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    close_reason: Option<u32>,
     reliable: bool,
     sequence: u32,
     exports: bool,
@@ -67,6 +71,10 @@ pub(crate) struct Network {
     streaming: bool,
     game_data: bool,
     cannon_layout: bool,
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    chest_probe: crate::chest_probe::Probe,
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    damage_rpc: Option<usize>,
 }
 
 impl Network {
@@ -87,6 +95,10 @@ impl Network {
             streaming: flags & 2 != 0,
             game_data: flags & 8 != 0,
             cannon_layout,
+            #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+            chest_probe: Default::default(),
+            #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+            damage_rpc: None,
         }
     }
 
@@ -96,6 +108,25 @@ impl Network {
 
     pub(crate) fn finish(&self, result: &mut Analysis) {
         self.observer.finish(result, &self.guids);
+        #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+        {
+            self.observer.finish_chest_probe(&self.chest_probe, result);
+            let mut exports: Vec<_> = self
+                .names
+                .iter()
+                .filter(|(path, index)| {
+                    path.contains("BatchedDamageCues")
+                        || self.groups[**index]
+                            .fields
+                            .iter()
+                            .flatten()
+                            .any(|field| field.name.contains("BatchedDamageCues"))
+                })
+                .map(|(path, _)| path.clone())
+                .collect();
+            exports.sort_unstable();
+            result.chest_probe.damage_exports = exports;
+        }
         #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
         {
             result.reward_probe.abilities.finish(&self.guids);
@@ -268,6 +299,8 @@ impl Network {
             let supply = is_supply_drop(&name);
             self.groups.push(Group {
                 name,
+                #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+                cache_name: format!("{path}_ClassNetCache"),
                 tail,
                 schema_key,
                 schema_started: false,
@@ -275,6 +308,10 @@ impl Network {
                 kind,
                 fields: (0..count).map(|_| None).collect(),
             });
+            #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+            if path.ends_with(":NetMulticast_Athena_BatchedDamageCues") {
+                self.damage_rpc = Some(i);
+            }
             self.names.insert(path, i);
             i
         };
@@ -393,9 +430,11 @@ impl Network {
             let control = packet.bit()?;
             let open = control && packet.bit()?;
             let close = control && packet.bit()?;
-            if close {
-                packet.serialized(15)?;
-            }
+            let _close_reason = if close {
+                Some(packet.serialized(15)?)
+            } else {
+                None
+            };
             packet.bit()?; // Replication paused.
             let reliable = packet.bit()?;
             let channel = packet.packed()? as usize;
@@ -433,6 +472,8 @@ impl Network {
                 channel,
                 open,
                 close,
+                #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+                close_reason: _close_reason,
                 reliable,
                 sequence,
                 exports,
@@ -503,6 +544,8 @@ impl Network {
             let part = self.partial.take().unwrap();
             let complete = Bunch {
                 close: bunch.close,
+                #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+                close_reason: bunch.close_reason,
                 mapped: bunch.mapped,
                 ..part.bunch
             };
@@ -520,6 +563,10 @@ impl Network {
     ) -> WireResult<()> {
         let parse = self.actor_content(bunch, &mut bits, time, result);
         if bunch.close {
+            #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+            if let Some(actor) = self.channels[bunch.channel] {
+                self.chest_probe.closed(actor.id, time, bunch.close_reason);
+            }
             self.channels[bunch.channel] = None;
         }
         parse
@@ -633,11 +680,109 @@ impl Network {
             }
             if layout && payload.left() > 0 {
                 if let Some(index) = self.group_for(rep) {
+                    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+                    self.probe_chest_block(index, actor, true, payload, time, bunch.open);
                     self.properties(index, actor, payload, time, result)?;
                 }
             }
+            #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+            if !layout && let Some(index) = self.probe_group(rep) {
+                self.probe_chest_block(index, actor, false, payload, time, bunch.open);
+            }
         }
         Ok(())
+    }
+
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    fn probe_group(&self, id: u32) -> Option<usize> {
+        if let Some(&index) = self.resolved.get(&id) {
+            return Some(index);
+        }
+        let name = self.guids.get(&id)?;
+        self.groups.iter().position(|group| {
+            (group.kind == Kind::Pawn
+                || group.name == "FortPawn:NetMulticast_Athena_BatchedDamageCues")
+                && *name == group.tail
+        })
+    }
+
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    fn probe_chest_block(
+        &mut self,
+        index: usize,
+        actor: Actor,
+        layout: bool,
+        mut bits: Bits<'_>,
+        time: f32,
+        opening_channel: bool,
+    ) {
+        if bits.left() == 0 {
+            return;
+        }
+        let group = &self.groups[index];
+        let fields = |handle: usize| {
+            group
+                .fields
+                .get(handle)?
+                .as_ref()
+                .map(|field| field.name.as_str())
+        };
+        let damage = Some(index) == self.damage_rpc;
+        if damage || (layout && matches!(group.kind, Kind::Chest | Kind::Cannon | Kind::Pickup)) {
+            self.chest_probe.fields(
+                actor.id,
+                time,
+                group.kind,
+                damage,
+                bits,
+                fields,
+                opening_channel,
+            );
+        }
+        if group.kind != Kind::Pawn {
+            return;
+        }
+        let Some(&cache) = self.names.get(&group.cache_name) else {
+            return;
+        };
+        let cache = &self.groups[cache];
+        let Some(rpc) = self.damage_rpc else { return };
+        let rpc = &self.groups[rpc];
+        let targets = |handle: usize| {
+            rpc.fields
+                .get(handle)?
+                .as_ref()
+                .map(|field| field.name.as_str())
+        };
+        if layout && crate::chest_probe::visit_fields(&mut bits, |_| None, |_, _| {}).is_err() {
+            return;
+        }
+        for _ in 0..64 {
+            if bits.left() == 0 {
+                break;
+            }
+            let Ok(handle) = bits.serialized(cache.fields.len().max(2) as u32) else {
+                break;
+            };
+            let Some(field) = cache.fields.get(handle as usize).and_then(Option::as_ref) else {
+                break;
+            };
+            let Ok(size) = bits.packed() else { break };
+            let Ok(value) = bits.slice(size as usize) else {
+                break;
+            };
+            if field.name == "NetMulticast_Athena_BatchedDamageCues" {
+                self.chest_probe.fields(
+                    actor.id,
+                    time,
+                    group.kind,
+                    true,
+                    value,
+                    targets,
+                    opening_channel,
+                );
+            }
+        }
     }
 
     #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
@@ -824,8 +969,8 @@ fn acquisition_reference(name: &str) -> bool {
         "reward",
         "client_replicatecontext",
     ]
-        .iter()
-        .any(|fragment| lower.contains(fragment))
+    .iter()
+    .any(|fragment| lower.contains(fragment))
 }
 
 #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]

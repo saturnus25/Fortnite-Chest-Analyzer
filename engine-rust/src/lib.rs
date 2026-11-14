@@ -1,4 +1,6 @@
 mod analysis;
+#[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+mod chest_probe;
 #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
 mod fast_array;
 mod names;
@@ -205,7 +207,13 @@ fn read_header(file: &mut Bytes<'_>, result: &mut Analysis) -> WireResult<Option
     result.guid = guid.iter().any(|b| *b != 0).then(|| hex(guid, true));
     file.skip(10)?; // Engine semantic version and changelist.
     result.branch = Some(file.string()?);
-    if engine != 45 || result.branch.as_deref() != Some("++Fortnite+Release-43.00") {
+    if engine != 45
+        || !matches!(
+            (result.branch.as_deref(), result.build),
+            (Some("++Fortnite+Release-43.00"), _)
+                | (Some("++Fortnite+Release-43.10"), Some(60_116_056))
+        )
+    {
         return Ok(None);
     }
     file.skip(12)?; // UE4, UE5 and licensee package versions.

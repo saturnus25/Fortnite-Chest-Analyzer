@@ -28,6 +28,7 @@ public sealed class Reader : ReplayReader<Replay>
     private readonly Dictionary<uint, Pickup> _pickups = [];
     private readonly Dictionary<uint, string> _cannonLoot = [];
     private readonly Dictionary<uint, uint> _pawns = [];
+    private readonly HashSet<uint> _ambiguousPawns = [];
     private readonly Dictionary<uint, Player> _players = [];
     private readonly Func<string, string> _accountKey;
     private readonly Dictionary<uint, string> _itemNames = [];
@@ -299,8 +300,12 @@ public sealed class Reader : ReplayReader<Replay>
                         UpdatePickup(actor, item, owner, count, tossed, picked, ToPosition(location ?? channel.Actor?.Location));
                         break;
                     case Kind.Pawn when playerState is > 0:
+                    {
+                        if (_pawns.TryGetValue(actor, out var previous) && previous != playerState.Value)
+                            _ambiguousPawns.Add(actor);
                         _pawns[actor] = playerState.Value;
                         break;
+                    }
                     case Kind.PlayerState:
                         if (!_players.TryGetValue(actor, out var player)) _players[actor] = player = new Player();
                         player.Alias = name ?? player.Alias;
@@ -500,7 +505,7 @@ public sealed class Reader : ReplayReader<Replay>
             return;
         }
         chest.OpenedAt = _time;
-        chest.OpeningPawn = pawn is > 0 ? pawn : precedingSearcher;
+        chest.OpeningPawn = pawn is > 0 ? pawn : pawn.HasValue ? null : precedingSearcher;
         chest.Action = cannon ? "fired" : broken ? "broken" : "opened";
         chest.Attribution = pawn is > 0 ? "confirmed" : chest.OpeningPawn.HasValue ? "inferred" : "unknown";
         chest.Evidence = cannon ? "SingleUseLootCannonFired" : broken ? "bDestroyed + SearchAnimationCount" :
@@ -535,7 +540,8 @@ public sealed class Reader : ReplayReader<Replay>
         _result.ChestActorsObserved = _chests.Count;
         foreach (var chest in _chests.Values.Where(c => c.OpenedAt.HasValue).OrderBy(c => c.OpenedAt))
         {
-            uint? playerId = chest.OpeningPawn is uint pawn && _pawns.TryGetValue(pawn, out var playerState) ? playerState : null;
+            uint? playerId = chest.OpeningPawn is uint pawn && !_ambiguousPawns.Contains(pawn)
+                && _pawns.TryGetValue(pawn, out var playerState) ? playerState : null;
             var other = playerId is uint id ? _players.GetValueOrDefault(id) : null;
             var isRecorder = playerId.HasValue && playerId == recorder;
             var role = isRecorder ? "recorder" : playerId.HasValue && squad.Contains(playerId.Value) ? "squad"

@@ -54,7 +54,7 @@ En el lote real aparecieron dos premios, `DelilahPrize:dpid_item15` (mochila Lil
 
 El archivo Unreal empieza con la firma `0x1CA2E27F`. Los bloques de datos contienen fotogramas, paquetes de red y diccionarios de propiedades replicadas. En 43.00, los datos están cifrados con AES-ECB y comprimidos con el códec Mermaid de Oodle. Se usa la clave que contiene el propio archivo terminado. El lector omite los checkpoints y recorre la grabación secuencialmente. Consulta la descripción del sistema de replay y el lector de referencia. [Epic Games](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-the-replay-system-in-unreal-engine), [FortniteReplayDecompressor](https://github.com/Shiqan/FortniteReplayDecompressor/tree/76f74c1f640069afdba71b6468e2f819327893c2).
 
-El parser identifica propiedades por nombre de exportación y conserva la versión de la grabación. La ruta Rust se habilita para la versión 43.00 con contenedor 7, cabecera de red 19 y protocolo de motor 45. Para otras combinaciones la web intenta usar el lector de compatibilidad anterior. Un parche que cambie la serialización de `SpawnedPickupLoot` requiere validar sus referencias de nuevo. Los datos de otras versiones se identifican con su versión real y pueden quedar parciales o incompatibles. [Historial del lector Unreal.Core](https://github.com/Shiqan/FortniteReplayDecompressor/commits/master/src/Unreal.Core/ReplayReader.cs).
+El parser identifica propiedades por nombre de exportación y conserva la versión de la grabación. La ruta Rust se habilita para Fortnite 43.00 y para 43.10 build 60116056 con contenedor 7, cabecera de red 19 y protocolo de motor 45. Para otras combinaciones la web intenta usar el lector de compatibilidad anterior. La vinculación por `SpawnedPickupLoot` se limita al build 59594394, donde se validó esa serialización. Los datos de otras versiones se identifican con su versión real y pueden quedar parciales o incompatibles. [Historial del lector Unreal.Core](https://github.com/Shiqan/FortniteReplayDecompressor/commits/master/src/Unreal.Core/ReplayReader.cs).
 
 Cada worker procesa una repetición a la vez. Se crean hasta cuatro workers independientes para repartir las repeticiones del lote, con un límite más bajo en equipos con poca memoria. Se limita cada repetición a 128 MiB y cada bloque decodificado a 64 MiB. Los ZIP se leen por entradas, se comprueba el CRC y se limita la extracción al tamaño declarado. El tiempo límite del worker permite retomar el lote después de un bloqueo. Las huellas del archivo y el GUID de la grabación evitan sumar copias. No se escribe nada en las carpetas de origen.
 
@@ -312,3 +312,94 @@ Las once imágenes de objeto se cargan desde el paquete local. La fila vacía de
 Los pósteres tienen su propio filtro de categoría. Recogerlos sigue contando como apertura según la regla indicada por el usuario y su actor puede aportar el origen de un premio de artilugio cuando la grabación contiene la evidencia de ese premio.
 
 En la validación del lote de 100 repeticiones, el lector reconoció 65 actores de artilugios. A los 32 anteriores se sumaron 30 de Fuegos artificiales dorados y 3 de Localizador de espíritus. El navegador validó las imágenes locales, ambos idiomas y las correcciones de las clases de contenedor. La prueba sintética conservó cinco aperturas, incluidas dos recogidas de póster, y tres adquisiciones con sus orígenes identificados.
+
+## Atribución de rupturas y destrucción indirecta
+
+### Alcance y fuentes
+
+El punto de partida es el commit `56ddd42`. Rust/WASM procesa el flujo de replicación en el navegador y el lector .NET/WASM cubre los protocolos alternativos. El worker elige el lector. El dashboard y el overlay consumen el mismo análisis, y el informe conserva `action`, `teamRole`, `attribution` y `evidence`. Se comparó el corpus privado de 100 replays 43.00, build 59594394, contenedor 7, red 19 y motor 45. Se comprobó también una segunda carpeta de 16 archivos con ramas entre 39.30 y 43.00. Las grabaciones originales se abrieron en modo lectura.
+
+| Proyecto revisado | Técnica presente en el código |
+| --- | --- |
+| [andruhan123YT/fortnite-chest-counter, d5ceb0d](https://github.com/andruhan123YT/fortnite-chest-counter/tree/d5ceb0d9aff45638c95def4cb19bd4a7e1cb3928/crates/chests/src) | `collect.rs` usa el cambio de `bAlreadySearched` y el pawn actual. Para la ruptura toma una marca de `SearchingPawn` sin búsqueda registrada y filtra bloques con `Role`, con excepción de determinadas aperturas al aparecer el cofre. `breaks.rs` tiene una ruta opcional de ráfagas de botín asociadas a pérdida de salud o desaparición y posición del jugador o vehículo. Su configuración advierte de sobreconteo en replays actuales. `lost.rs` estima aperturas perdidas a partir de grupos de botín expulsado y del jugador más cercano. |
+| [b0ulbix/fortnite-chest-tracker, 7fa8c69](https://github.com/b0ulbix/fortnite-chest-tracker/blob/7fa8c69376d5cfff384deae948519da5b76f9eb2/src/ChestCounter/Program.cs) | Sigue el estado del contenedor por GUID de actor y enlaza Pawn → PlayerState. Lee golpes fatales de `BatchedDamageCues`. Como alternativa a `SearchingPawn`, busca un golpe del grabador contra el mismo actor en una ventana de −5 a +1 s alrededor de la destrucción. También contiene una ruta espacial que compara `LootInitialPosition` con la trayectoria del jugador. Distingue un cofre ya abierto de uno roto. El comentario del código sobre la tasa de aciertos pertenece a su corpus. |
+
+Se consultaron archivos fuente y documentación mediante GitHub. La implementación se escribió sobre los lectores existentes, sin incorporar código de esos repositorios ni ejecutar sus programas. [Formato de replays y replicación de Unreal Engine](https://dev.epicgames.com/documentation/unreal-engine/using-the-replay-system-in-unreal-engine).
+
+El README de b0ulbix presenta su contador como exacto. El código combina referencias directas, una alternativa temporal para golpes fatales y una ruta por posición. La exactitud de cada ruta se tendría que medir con eventos verificados. El proyecto de andruhan separa expresamente las marcas de ruptura de sus estimaciones por botín en el código.
+
+### Diseño del experimento y cambios activados
+
+La feature nativa `chest-probe` añade `chestProbe` al JSON de la CLI. No está incluida en WASM. Guarda muestras de cambios por NetGUID y el ID estable que usa el lector, el instante del registro, el estado, la presencia de `Role` y del indicador de apertura de canal, un posible pawn anterior, `AttachParent`, `Instigator`, candidatos de golpe y de premio, cierre de canal y botín vinculado. El ID del replay es el GUID del registro que contiene esos casos. El diagnóstico conserva hasta 150.000 observaciones por replay y marca si se agota el límite. Los candidatos se comparan con la salida normal y nunca la alimentan.
+
+Se lee el RPC `NetMulticast_Athena_BatchedDamageCues` mediante el ClassNetCache del pawn. Se exige que objetivo y bit fatal aparezcan en el mismo RPC. La comparación usa el NetGUID exacto del objetivo y ±1 s alrededor del primer estado de destrucción observado. Para investigar el soporte, se aplica el mismo criterio al último `AttachParent` válido anterior o simultáneo. Los candidatos se deduplican por PlayerState y se conservan los conflictos. Un golpe directo que coincide con el responsable ya registrado corrobora la ruptura. Una referencia a un soporte es solo una hipótesis hasta verificar qué objeto representaba y que su destrucción causó la caída.
+
+Cambios de producción en los lectores Rust y .NET:
+
+- Un `SearchingPawn = 0` explícito invalida el candidato anterior. Cuando el campo se omite, se conserva el criterio previo de inferencia limitada. Una referencia explícita nueva prevalece sobre la anterior.
+- Si un NetGUID de pawn se vincula a dos PlayerState distintos en la misma grabación, su identidad queda desconocida. Una retransmisión del mismo vínculo se admite. Es una protección conservadora que también puede dejar sin identificar eventos válidos de un ciclo previo de ese pawn. La reconstrucción temporal completa de actores reutilizados sigue pendiente.
+- Se conserva la clasificación existente `confirmed`, `inferred` y `unknown`. Durante esta investigación ningún candidato experimental se incorporó a los agregados. Una apertura seguida de destrucción queda registrada como apertura en el recuento de cofres y la tabla de estados conserva la destrucción por separado.
+
+Para leer la confianza, `confirmed` se refiere a la identificación del peón que traía la actualización. En rupturas, eso no demuestra por sí solo la herramienta, la cadena de daño o el último golpe. `inferred` identifica el caso en que se reutilizó una referencia reciente durante una apertura. `unknown` cubre una referencia ausente, no resuelta, eliminada o contradictoria. El diagnóstico distingue candidatos directos y de soporte de una ruptura corroborada. Un conflicto conserva todos los candidatos y se excluye de cualquier propuesta de atribución nueva. Las inferencias experimentales no tienen porcentajes ni modifican los recuentos.
+
+### Resultados reproducidos
+
+| Métrica del corpus 43.00 | 56ddd42 | Después |
+| --- | ---: | ---: |
+| Análisis completos / incompatibles | 99 / 1 | 99 / 1 |
+| Aperturas de clases de cofre, todos los equipos | 7.308 | 7.308 |
+| Rupturas de clases de cofre, todos los equipos | 2.562 | 2.562 |
+| Aperturas de clases de cofre, grabador y escuadrón | 3.340 | 3.340 |
+| Rupturas de clases de cofre, grabador y escuadrón | 1.769 | 1.769 |
+| Cofres destruidos sin apertura ni evento atribuido | 269 | 269 |
+| IDs de evento duplicados dentro de un replay | 0 | 0 |
+
+Las cifras de la tabla excluyen pósteres. El overlay conserva la regla habitual de sumar sus seis recogidas al lote del escuadrón y muestra 5.115 cofres abiertos o rotos. La comparación del JSON completo, quitando solo el campo de diagnóstico, dio el mismo resultado en los 100 archivos. Se conservaron las atribuciones y los enlaces de botín completos. **Eventos nuevos: 0. Responsables nuevos: 0. Atribuciones cambiadas: 0.** La coincidencia de salidas mide estabilidad y carece de una referencia de autoría verificada para todo el corpus.
+
+- **Golpes directos.** Nueve rupturas existentes tenían un golpe fatal que coincidía con el responsable. Ninguno de los 269 cofres sin atribuir tenía un candidato directo resuelto. Hubo 89 objetivos con un golpe coincidente alrededor de la destrucción de un cofre ya contado como abierto. En 18 el golpe no apuntaba al jugador que lo abrió. Hubo cinco candidatos adicionales en actores sin evento y con indicios de haber estado abiertos. Se mantuvieron fuera.
+- **Soportes.** Se observaron 381 campos `AttachParent` entre los contenedores inspeccionados. Ninguno de los 269 cofres sin atribuir tenía un padre resuelto en el instante pertinente ni se encontró un golpe fatal correlacionado contra un soporte de un cofre clasificado. `Instigator` apareció 59 veces en los flujos inspeccionados, pero no en la actualización de destrucción de esas rupturas o de los 269 casos. Las 372 observaciones de `ProxyGameplayCueDamageMagnitude` aportan evidencia de daño, sin identificar al responsable.
+- **Botín y relevancia.** En 147 de los 269 casos, un pickup con `Owner` igual al actor exacto y `bTossedFromContainer` verdadero quedó a ±2 s del estado de destrucción. Esto vincula el botín con el contenedor. `SpawnedPickupLoot` sigue siendo la referencia explícita usada para cañones. Se detectaron 55 rupturas de cofres con `Role` y apertura de canal en el mismo bloque de destrucción. La combinación es una señal de estado inicial o retransmitido, sin verdad terreno suficiente para descartar las 55. Se observaron también 1.124 actores de contenedor sin evento, sin estado abierto, sin `bDestroyed` verdadero y con al menos un cierre de razón 0. El cierre solo se conserva para revisión.
+- **Pawn y premio.** En tres rupturas de cofre el último `SearchingPawn` anterior observado era distinto al registrado en el bloque de destrucción. Un `OpeningPawn` de premio con `bFromDestruction` y origen exacto coincidió con una ruptura ya detectada. Esa referencia describe al jugador asociado al premio y no se eleva a autor de daño.
+- **Coste.** Una pasada secuencial comparable en Windows, con salida JSON a disco y muestreo de `PeakWorkingSet64` cada 200 ms, dio 25,51 s / 55,5 MiB para la base, 23,60 s / 55,5 MiB para la compilación normal y 29,25 s / 56,9 MiB para el diagnóstico durante su desarrollo. Son mediciones puntuales. El rango observado no demuestra una mejora de velocidad. Ningún replay agotó el límite del diagnóstico.
+
+### Reproducción y grabaciones pendientes
+
+Desde la raíz del proyecto en PowerShell 7, compila la CLI base a partir de `56ddd42` y conserva su ejecutable en `.research/chest-baseline-56ddd42.exe`. Usa el mismo compilador y los mismos archivos para las dos pasadas.
+
+```powershell
+cargo build --manifest-path engine-rust/Cargo.toml --locked --release --features chest-probe --bin replay
+$files = @(Get-ChildItem Demos -File -Filter '*.replay' | Sort-Object Name | Select-Object -ExpandProperty FullName)
+& '.research/chest-baseline-56ddd42.exe' @files > .research/chest-baseline-56ddd42.jsonl
+& 'engine-rust/target/release/replay.exe' @files > .research/chest-probe.jsonl
+node tests/compare-chest-attribution.mjs .research/chest-baseline-56ddd42.jsonl .research/chest-probe.jsonl
+cargo test --manifest-path engine-rust/Cargo.toml --locked --lib --features chest-probe,reward-probe
+npm run build
+```
+
+Las pruebas sintéticas cubren apertura y retransmisión, destrucción directa, destrucción indirecta marcada como candidata, referencia anterior borrada o reemplazada, dos responsables en conflicto, desaparición sin autor, botín sin apertura, jugadores próximos, pawn no resuelto y reutilización de su identificador. Se ejecutaron 16 pruebas Rust. La regresión en navegador comprobó importación, exportación y 99 resultados utilizables de los 100 archivos. El overlay mantuvo 5.115 para el equipo y 269 sin atribuir. En la segunda carpeta, tanto las salidas Rust como las salidas del lector .NET coincidieron con sus respectivas bases en los 16 archivos. Rust mantuvo la derivación a .NET en 14. El lector de compatibilidad obtuvo dos análisis completos de 39.30 y dos de 42.40 entre los archivos derivados. Las demás ramas de ese lote quedaron sin resultados utilizables y no se declaran soportadas por aparecer en la cabecera. Los casos de laboratorio verifican el comportamiento del lector ante entradas conocidas, no la semántica real de Fortnite.
+
+Para distinguir los mecanismos faltan grabaciones con el instante de cada acción y el actor objetivo verificado. Conviene repetir con el mismo tipo de cofre, el mismo build y un segundo jugador que permanezca al lado sin actuar. Casos necesarios:
+
+1. Un cofre recién generado que A golpea directamente con pico, disparo o explosión. Repetir cada herramienta por separado.
+2. Un cofre intacto cuyo suelo, mueble o estructura rompe A. Registrar el soporte exacto y si el cofre cae, se destruye o suelta botín.
+3. Un cofre y un soporte embestidos por un vehículo en pruebas separadas, con A como conductor y B como pasajero. Registrar quién conducía al impacto.
+4. A inicia la búsqueda y la interrumpe. B destruye el cofre inmediatamente y se repite con una espera. Esto permite distinguir una referencia persistente del verdadero responsable.
+5. A abre el cofre y B lo destruye después. Comparar con un cofre intacto que sale del alcance y vuelve a entrar, para evaluar los marcadores de retransmisión y reapertura de canal.
+
+Hasta disponer de esas muestras, las relaciones de soporte, golpes correlacionados, proximidad y botín permanecen en diagnóstico. El inspector puede ayudar a elegir qué instante revisar, sin transformar una correlación en un premio o una autoría.
+
+### Segundo corpus de Fortnite 43.10
+
+`New demos` contiene cuatro archivos del 13 de noviembre de 2026, rama 43.10, build 60116056, con contenedor 7, cabecera de red 19 y protocolo del motor 45. Es un lote distinto del corpus de 100 archivos 43.00. Primero se leyó con .NET y se inspeccionó con una copia de `chest-probe` que admitía el build. Los dos lectores coincidieron en el contador `frames` y en los 243 eventos de clases de cofre al comparar clase, acción, jugador, equipo, confianza, evidencia e instante al milisegundo.
+
+| Inicio de grabación | Aperturas de cofre | Rupturas de cofre | Aperturas del escuadrón | Rupturas del escuadrón |
+| --- | ---: | ---: | ---: | ---: |
+| 17:10:24 | 86 | 21 | 40 | 18 |
+| 23:13:35 | 25 | 9 | 9 | 5 |
+| 23:23:49 | 38 | 6 | 28 | 2 |
+| 23:35:15 | 40 | 18 | 13 | 15 |
+| **Total** | **189** | **54** | **90** | **40** |
+
+El diagnóstico registró dos cofres destruidos sin apertura ni responsable. El cofre normal de la primera grabación entró en ese estado en 10:53,654, con cuatro pickups vinculados explícitamente. El cofre normal de aparición fija de la tercera entró en ese estado en 2:39,314. Ninguno de los dos tenía un golpe fatal coincidente ni un `AttachParent` resuelto. Los dos cofres con golpe fatal coincidente del lote ya se habían contado como abiertos. No se recuperaron responsables ni se incorporaron eventos nuevos.
+
+La ruta Rust de producción admite el build 60116056. Se verificó en Edge que los cuatro archivos se exportan como completos con `engine: rust`, sin cargar el lector .NET. Los dos lectores registraron el mismo botín y escuadrón en los cuatro archivos. Rust también registró tres aperturas de entregas de suministros `AthenaSupplyDrop_PoolDust` con autor desconocido. El lote no contiene un disparo de cañón validado ni un premio de cofre que permita ampliar los esquemas específicos de esos campos. Se comparó la salida completa de los 100 archivos 43.00 ejecutando el WASM de antes y después del cambio y se obtuvieron resultados idénticos.

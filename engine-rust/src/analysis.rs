@@ -62,11 +62,12 @@ pub struct Analysis {
     gizmos: BTreeMap<u32, GizmoObservation>,
     pub schema: BTreeMap<String, BTreeSet<String>>,
     pub events: BTreeSet<String>,
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    pub(crate) chest_probe: crate::chest_probe::Report,
     #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
     #[serde(skip_serializing_if = "RewardProbe::is_empty")]
     pub(crate) reward_probe: RewardProbe,
 }
-
 
 #[cfg(all(feature = "reward-probe", not(target_arch = "wasm32")))]
 #[derive(Default, Serialize)]
@@ -175,7 +176,9 @@ impl Analysis {
             "B_FlameCeleb_BaseWeapon_C" => ("WID_FlameCeleb_Consumable_S43", "golden-firework"),
             "B_ExtractionSiteBooster_C" => ("WID_ExtractionSiteBooster", "site-booster"),
             "B_JunkFoodBucket_Gizmo_C" => ("WID_JunkFoodBucket_Gizmo", "snack-lantern"),
-            "B_LlamaSupplyDropRadioGizmo_Weapon_C" => ("WID_LLamaSupplyDropRadioGizmo", "llama-drop"),
+            "B_LlamaSupplyDropRadioGizmo_Weapon_C" => {
+                ("WID_LLamaSupplyDropRadioGizmo", "llama-drop")
+            }
             "B_SpicyTaco_Gizmo_C" => ("WID_SpicyTaco_Gizmo", "spicy-taco"),
             _ => return,
         };
@@ -643,6 +646,14 @@ struct Event {
     evidence: &'static str,
 }
 
+fn opening_actor(current: Option<u32>, preceding: Option<u32>) -> (Option<u32>, &'static str) {
+    match (current, preceding) {
+        (Some(id @ 1..), _) => (Some(id), "confirmed"),
+        (None, Some(id)) => (Some(id), "inferred"),
+        _ => (None, "unknown"),
+    }
+}
+
 impl Chest {
     fn observe(&mut self, time: f32, data: &Update, cannon: bool) {
         self.first_seen.get_or_insert(time);
@@ -690,9 +701,10 @@ impl Chest {
             self.previously_open = true;
             return;
         }
+        let (pawn, attribution) = opening_actor(data.searcher, preceding);
         self.opening = Some(Event {
             time,
-            pawn: searcher.or(preceding),
+            pawn,
             action: if cannon {
                 "fired"
             } else if broken {
@@ -700,13 +712,7 @@ impl Chest {
             } else {
                 "opened"
             },
-            attribution: if searcher.is_some() {
-                "confirmed"
-            } else if preceding.is_some() {
-                "inferred"
-            } else {
-                "unknown"
-            },
+            attribution,
             evidence: if cannon {
                 "SingleUseLootCannonFired"
             } else if broken {
@@ -738,6 +744,7 @@ pub(crate) struct Observer {
     recorder: Option<u32>,
     controller: Option<u32>,
     pawns: HashMap<u32, u32>,
+    ambiguous_pawns: HashSet<u32>,
     players: HashMap<u32, Player>,
     display_names: HashMap<u32, Vec<DisplayName>>,
     chests: Vec<Chest>,
@@ -762,6 +769,167 @@ pub(crate) struct Observation<'a> {
 }
 
 impl Observer {
+    fn player_for_pawn(&self, pawn: u32) -> Option<u32> {
+        if self.ambiguous_pawns.contains(&pawn) {
+            return None;
+        }
+        self.pawns.get(&pawn).copied()
+    }
+
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    pub(crate) fn finish_chest_probe(
+        &self,
+        probe: &crate::chest_probe::Probe,
+        analysis: &mut Analysis,
+    ) {
+        use crate::chest_probe::Case;
+        let mut actors = Vec::new();
+        let mut searcher_without_transition = 0;
+        let mut closed_without_event = BTreeMap::new();
+        let mut linked = HashMap::new();
+        let mut prizes = HashMap::new();
+        for prize in self.treasures.values() {
+            if let (Some(source), Some(time), Some(pawn), Some(true)) = (
+                prize.source,
+                prize.success_at,
+                prize.pawn,
+                prize.from_destruction,
+            ) && let Some(player) = self.player_for_pawn(pawn)
+            {
+                prizes
+                    .entry(source)
+                    .or_insert_with(Vec::new)
+                    .push((time, player));
+            }
+        }
+        for (_, pickup) in &self.pickups {
+            if pickup.tossed == Some(true)
+                && let Some(owner) = pickup.owner
+            {
+                linked
+                    .entry(owner)
+                    .or_insert_with(Vec::new)
+                    .push(pickup.time);
+            }
+        }
+        for (&actor, updates) in &probe.updates {
+            let Some(&index) = self.chest_by_actor.get(&actor) else {
+                continue;
+            };
+            let chest = &self.chests[index];
+            if chest.opening.is_none() && !chest.observed_open && !chest.previously_open {
+                if updates.iter().any(|update| {
+                    !update.resent
+                        && update.searcher.is_some_and(|pawn| pawn > 0)
+                        && update.searched != Some(true)
+                        && update.destroyed != Some(true)
+                }) {
+                    searcher_without_transition += 1;
+                }
+                if chest.destroyed != Some(true) {
+                    for reason in probe
+                        .closes
+                        .get(&actor)
+                        .into_iter()
+                        .flatten()
+                        .map(|(_, reason)| *reason)
+                        .collect::<BTreeSet<_>>()
+                    {
+                        *closed_without_event.entry(reason).or_insert(0) += 1;
+                    }
+                }
+            }
+            let Some(state) = updates.iter().find(|update| update.destroyed == Some(true)) else {
+                continue;
+            };
+            let mut parent = None;
+            let mut prior_searcher = None;
+            for update in updates
+                .iter()
+                .take_while(|update| update.time <= state.time)
+            {
+                if let Some(id) = update.parent {
+                    parent = (id > 0).then_some(id);
+                }
+                if let Some(id) = update.searcher
+                    && update.time < state.time
+                {
+                    prior_searcher = (id > 0).then_some((update.time, id));
+                }
+            }
+            let candidates = |target| {
+                crate::chest_probe::resolve_candidate(
+                    probe
+                        .fatal
+                        .get(&target)
+                        .into_iter()
+                        .flatten()
+                        .filter(|(time, _)| (state.time - time).abs() <= 1.0)
+                        .map(|(_, pawn)| *pawn),
+                    |pawn| self.player_for_pawn(pawn),
+                )
+            };
+            let event = chest.opening.as_ref();
+            let action = event.map(|event| event.action);
+            let player_state = event
+                .and_then(|event| event.pawn)
+                .and_then(|pawn| self.player_for_pawn(pawn));
+            let direct = candidates(actor);
+            let support = parent
+                .filter(|id| *id != actor)
+                .map(candidates)
+                .unwrap_or_default();
+            let assessment = crate::chest_probe::assess(action, player_state, &direct, &support);
+            let mut prize_openers: Vec<_> = prizes
+                .get(&actor)
+                .into_iter()
+                .flatten()
+                .filter(|(time, _)| (state.time - *time).abs() <= 1.0)
+                .map(|(_, player)| *player)
+                .collect();
+            prize_openers.sort_unstable();
+            prize_openers.dedup();
+            actors.push(Case {
+                id: chest.id.clone(),
+                actor,
+                kind: chest.kind.clone(),
+                action,
+                player_state,
+                at: state.time,
+                state: *state,
+                prior_searcher,
+                parent,
+                direct,
+                support,
+                prize_openers,
+                assessment,
+                close: probe
+                    .closes
+                    .get(&actor)
+                    .and_then(|closes| closes.iter().find(|(time, _)| *time >= state.time))
+                    .copied(),
+                linked_loot: linked
+                    .get(&actor)
+                    .into_iter()
+                    .flatten()
+                    .filter(|time| (state.time - *time).abs() <= 2.0)
+                    .count(),
+                unassigned: !chest.observed_open && !chest.previously_open && event.is_none(),
+            });
+        }
+        actors.sort_by_key(|case| case.actor);
+        analysis.chest_probe = crate::chest_probe::Report {
+            fields: probe.fields.clone(),
+            malformed: probe.malformed,
+            truncated: probe.truncated,
+            fatal_targets: probe.fatal.len(),
+            actors,
+            searcher_without_transition,
+            closed_without_event,
+            ..Default::default()
+        };
+    }
+
     pub(crate) fn record_name(&mut self, actor: u32, time: f32, payload: &[u8]) {
         let Some(name) = read_display_name(payload) else {
             return;
@@ -852,7 +1020,13 @@ impl Observer {
             Kind::Pickup => self.pickup(actor, time, position, guids, data)?,
             Kind::Pawn => {
                 if let Some(state) = data.state {
-                    self.pawns.insert(actor, state);
+                    if self
+                        .pawns
+                        .insert(actor, state)
+                        .is_some_and(|previous| previous != state)
+                    {
+                        self.ambiguous_pawns.insert(actor);
+                    }
                 }
             }
             Kind::PlayerState => self.players.entry(actor).or_default().merge(data.player),
@@ -1047,7 +1221,7 @@ impl Observer {
             let Some(event) = &chest.opening else {
                 continue;
             };
-            let player_id = event.pawn.and_then(|id| self.pawns.get(&id).copied());
+            let player_id = event.pawn.and_then(|id| self.player_for_pawn(id));
             let other = player_id.and_then(|id| self.players.get(&id));
             let is_recorder = player_id.is_some() && player_id == recorder;
             let team_role = if is_recorder {
@@ -1062,7 +1236,9 @@ impl Observer {
             } else {
                 "unknown"
             };
-            if chest.first_seen.is_some() && chest.searchable && event.action == "opened"
+            if chest.first_seen.is_some()
+                && chest.searchable
+                && event.action == "opened"
                 && let Some(totals) = analysis.containers.get_mut(&chest.kind)
             {
                 match team_role {
@@ -1096,7 +1272,7 @@ impl Observer {
             let Some(time) = treasure.success_at else {
                 continue;
             };
-            let player_id = treasure.pawn.and_then(|id| self.pawns.get(&id).copied());
+            let player_id = treasure.pawn.and_then(|id| self.player_for_pawn(id));
             let source_type = treasure
                 .source
                 .and_then(|id| self.chest_by_actor.get(&id))
@@ -1256,9 +1432,11 @@ fn read_display_name(payload: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::{
-        Analysis, Bits, Kind, Observation, Observer, TreasureState, Update, read_display_name,
-        read_prize_id,
+        Analysis, Bits, Kind, Observation, Observer, Position, TreasureState, Update,
+        opening_actor, read_display_name, read_prize_id,
     };
 
     #[test]
@@ -1372,19 +1550,43 @@ mod tests {
         let guids = Default::default();
         for actor in [20, 21] {
             for (time, update) in [
-                (1.0, Update { searched: Some(false), ..Default::default() }),
-                (2.0, Update {
-                    destroyed: Some(true),
-                    animation: (actor == 21).then_some(1),
-                    searcher: (actor == 21).then_some(30),
-                    ..Default::default()
-                }),
-                (3.0, Update { destroyed: Some(true), ..Default::default() }),
+                (
+                    1.0,
+                    Update {
+                        searched: Some(false),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    2.0,
+                    Update {
+                        destroyed: Some(true),
+                        animation: (actor == 21).then_some(1),
+                        searcher: (actor == 21).then_some(30),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    3.0,
+                    Update {
+                        destroyed: Some(true),
+                        ..Default::default()
+                    },
+                ),
             ] {
-                observer.update(Observation {
-                    actor, time, kind: Kind::Chest, name: "Tiered_Chest_Athena",
-                    position: None, guids: &guids,
-                }, update).unwrap();
+                observer
+                    .update(
+                        Observation {
+                            actor,
+                            time,
+                            kind: Kind::Chest,
+                            name: "Tiered_Chest_Athena",
+                            position: None,
+                            guids: &guids,
+                        },
+                        update,
+                    )
+                    .unwrap();
             }
         }
         let mut result = Analysis::default();
@@ -1394,6 +1596,197 @@ mod tests {
         assert_eq!(chest.destroyed_without_opening, Some(1));
         assert_eq!(result.chests.len(), 1);
         assert_eq!(result.chests[0].action, "broken");
+    }
+
+    #[test]
+    fn null_searcher_clears_prior_evidence_and_new_actor_takes_priority() {
+        assert_eq!(opening_actor(Some(0), Some(20)), (None, "unknown"));
+        assert_eq!(opening_actor(Some(21), Some(20)), (Some(21), "confirmed"));
+        assert_eq!(opening_actor(None, Some(20)), (Some(20), "inferred"));
+    }
+
+    #[test]
+    fn reused_pawn_does_not_reassign_previous_openings() {
+        let mut observer = Observer::default();
+        let guids = HashMap::new();
+        for state in [100, 100, 200] {
+            observer
+                .update(
+                    Observation {
+                        actor: 20,
+                        time: 1.0,
+                        kind: Kind::Pawn,
+                        name: "PlayerPawn_Athena",
+                        position: None,
+                        guids: &guids,
+                    },
+                    Update {
+                        state: Some(state),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            if state == 100 {
+                assert_eq!(observer.player_for_pawn(20), Some(100));
+            }
+        }
+        assert_eq!(observer.player_for_pawn(20), None);
+        assert_eq!(observer.player_for_pawn(999), None);
+    }
+
+    #[test]
+    fn loot_without_an_opening_and_nearby_players_do_not_create_an_event() {
+        let mut observer = Observer::default();
+        let guids = HashMap::from([(15, "ExampleItem".to_owned())]);
+        for (actor, kind, name, data) in [
+            (
+                20,
+                Kind::Chest,
+                "Tiered_Chest_Athena",
+                Update {
+                    searched: Some(false),
+                    ..Default::default()
+                },
+            ),
+            (
+                22,
+                Kind::Pickup,
+                "FortPickupAthena",
+                Update {
+                    item: Some(15),
+                    owner: Some(20),
+                    tossed: Some(true),
+                    ..Default::default()
+                },
+            ),
+            (
+                24,
+                Kind::Pawn,
+                "PlayerPawn_Athena",
+                Update {
+                    state: Some(200),
+                    ..Default::default()
+                },
+            ),
+            (
+                26,
+                Kind::Pawn,
+                "PlayerPawn_Athena",
+                Update {
+                    state: Some(201),
+                    ..Default::default()
+                },
+            ),
+        ] {
+            observer
+                .update(
+                    Observation {
+                        actor,
+                        time: 2.0,
+                        kind,
+                        name,
+                        position: Some(Position::new(20., 30., 40.)),
+                        guids: &guids,
+                    },
+                    data,
+                )
+                .unwrap();
+        }
+        let mut result = Analysis::default();
+        observer.finish(&mut result, &guids);
+        assert!(result.chests.is_empty());
+        assert_eq!(result.items.len(), 1);
+        assert!(result.items[0].chest_id.is_none());
+    }
+
+    #[test]
+    fn repeated_open_state_counts_once() {
+        let mut observer = Observer::default();
+        let guids = HashMap::new();
+        for (time, searched) in [(1.0, false), (2.0, true), (3.0, true), (4.0, true)] {
+            observer
+                .update(
+                    Observation {
+                        actor: 20,
+                        time,
+                        kind: Kind::Chest,
+                        name: "Tiered_Chest_Athena",
+                        position: None,
+                        guids: &guids,
+                    },
+                    Update {
+                        searched: Some(searched),
+                        searcher: searched.then_some(24),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        let mut result = Analysis::default();
+        observer.finish(&mut result, &guids);
+        assert_eq!(result.chests.len(), 1);
+        assert_eq!(result.chests[0].time, 2.0);
+        assert_eq!(result.chests[0].attribution, "unknown");
+    }
+
+    #[test]
+    #[cfg(all(feature = "chest-probe", not(target_arch = "wasm32")))]
+    fn attached_support_and_channel_close_are_diagnostic_only() {
+        use crate::chest_probe::{ChestUpdate, Probe};
+        let mut observer = Observer::default();
+        let guids = HashMap::new();
+        observer.pawns.insert(60, 80);
+        for (actor, destroyed) in [(20, true), (21, false)] {
+            observer
+                .update(
+                    Observation {
+                        actor,
+                        time: 4.0,
+                        kind: Kind::Chest,
+                        name: "Tiered_Chest_Athena",
+                        position: None,
+                        guids: &guids,
+                    },
+                    Update {
+                        destroyed: Some(destroyed),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        let mut probe = Probe::default();
+        probe.updates.insert(
+            20,
+            vec![
+                ChestUpdate {
+                    time: 1.0,
+                    parent: Some(45),
+                    ..Default::default()
+                },
+                ChestUpdate {
+                    time: 4.0,
+                    destroyed: Some(true),
+                    ..Default::default()
+                },
+            ],
+        );
+        probe.updates.insert(
+            21,
+            vec![ChestUpdate {
+                time: 3.0,
+                searched: Some(false),
+                ..Default::default()
+            }],
+        );
+        probe.fatal.insert(45, vec![(3.9, 60)]);
+        probe.closed(21, 4.0, Some(3));
+        let mut result = Analysis::default();
+        observer.finish(&mut result, &guids);
+        observer.finish_chest_probe(&probe, &mut result);
+        assert!(result.chests.is_empty());
+        assert_eq!(result.chest_probe.actors[0].support, [80]);
+        assert!(result.chest_probe.actors[0].direct.is_empty());
+        assert_eq!(result.chest_probe.closed_without_event[&3], 1);
     }
 
     #[test]

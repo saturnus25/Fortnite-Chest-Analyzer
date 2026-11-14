@@ -6,6 +6,7 @@ license = "GPL-3.0-or-later"
 
 [features]
 reward-probe = []
+chest-probe = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
