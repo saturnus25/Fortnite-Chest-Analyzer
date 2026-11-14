@@ -614,6 +614,7 @@ struct ContainerCounts {
     opened_by_squad: usize,
     opened_by_other: usize,
     destroyed: Option<usize>,
+    destroyed_without_opening: Option<usize>,
     destruction_observed: usize,
 }
 
@@ -1017,6 +1018,12 @@ impl Observer {
                 if let Some(destroyed) = chest.destroyed {
                     totals.destruction_observed += 1;
                     *totals.destroyed.get_or_insert(0) += usize::from(destroyed);
+                    *totals.destroyed_without_opening.get_or_insert(0) += usize::from(
+                        destroyed
+                            && !chest.observed_open
+                            && !chest.previously_open
+                            && chest.opening.is_none(),
+                    );
                 }
             }
             if is_supply_drop(&chest.kind)
@@ -1351,11 +1358,42 @@ mod tests {
             (1, Some(1), Some(1), 1)
         );
         assert_eq!(result.treasures.len(), 1);
+        assert_eq!(chest.destroyed_without_opening, Some(0));
         assert_eq!(result.treasures[0].observed_at, 2.0);
         assert_eq!(
             result.treasures[0].source_type.as_deref(),
             Some("Tiered_Chest_Athena")
         );
+    }
+
+    #[test]
+    fn separates_destroyed_chests_without_opening_from_break_events() {
+        let mut observer = Observer::default();
+        let guids = Default::default();
+        for actor in [20, 21] {
+            for (time, update) in [
+                (1.0, Update { searched: Some(false), ..Default::default() }),
+                (2.0, Update {
+                    destroyed: Some(true),
+                    animation: (actor == 21).then_some(1),
+                    searcher: (actor == 21).then_some(30),
+                    ..Default::default()
+                }),
+                (3.0, Update { destroyed: Some(true), ..Default::default() }),
+            ] {
+                observer.update(Observation {
+                    actor, time, kind: Kind::Chest, name: "Tiered_Chest_Athena",
+                    position: None, guids: &guids,
+                }, update).unwrap();
+            }
+        }
+        let mut result = Analysis::default();
+        observer.finish(&mut result, &guids);
+        let chest = &result.containers["Tiered_Chest_Athena"];
+        assert_eq!(chest.destroyed, Some(2));
+        assert_eq!(chest.destroyed_without_opening, Some(1));
+        assert_eq!(result.chests.len(), 1);
+        assert_eq!(result.chests[0].action, "broken");
     }
 
     #[test]

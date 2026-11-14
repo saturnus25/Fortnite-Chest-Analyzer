@@ -1,5 +1,5 @@
 import { gizmoNames } from './catalog'
-import { chestOpened } from './containers'
+import { chestOpened, containerOf } from './containers'
 import { translate } from './locales'
 import { memberKey } from './squad'
 import { gizmoFromTemplate, squadRewardOpenings, squadRewardTemplates, treasureName } from './treasure'
@@ -8,7 +8,7 @@ import type { Result } from './types'
 
 const roles = ['recorder', 'mates', 'team'] as const
 type Role = typeof roles[number]
-type RoleCounts = Record<Role, number | null>
+type RoleCounts = Record<Role, number | null> & { unassigned: number }
 type Ranked = { key: string; name: string | null; nameTime: number; opened: number }
 const maxRankings = 12
 
@@ -40,7 +40,9 @@ function matchStats(match: Result): MatchStats {
   const recorded = date ? Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(date) ? date : `${date}Z`) : NaN
   const start = Number.isFinite(recorded) ? recorded : match.fileModifiedAt ?? -Infinity
   const end = Number.isFinite(recorded) ? start + Math.max(0, match.durationMs ?? 0) : start
-  const counts: RoleCounts = { recorder: recorderKnown ? 0 : null, mates: matesKnown ? 0 : null, team: null }
+  const unassigned = Object.entries(match.containers ?? {}).reduce((sum, [type, data]) =>
+    sum + (containerOf(type).category === 'chest' ? data.destroyedWithoutOpening ?? 0 : 0), 0)
+  const counts: RoleCounts = { recorder: recorderKnown ? 0 : null, mates: matesKnown ? 0 : null, team: null, unassigned }
   const players = new Map<string, Ranked>()
   for (const member of roster.values()) {
     const observed = member.displayNames?.reduce<{ name: string; observedAt: number } | undefined>(
@@ -49,7 +51,9 @@ function matchStats(match: Result): MatchStats {
     players.set(key, { key, name: observed?.name || member.alias || null, nameTime: start + (observed?.observedAt ?? 0) * 1000, opened: 0 })
   }
   for (const event of match.chests) {
-    if (!chestOpened(event)) continue
+    const broken = event.action === 'broken' && containerOf(event.type).category === 'chest'
+    if (!chestOpened(event) && !broken) continue
+    if (broken && event.teamRole === 'unknown') counts.unassigned++
     if (event.teamRole === 'recorder') counts.recorder = (counts.recorder ?? 0) + 1
     else if (event.teamRole === 'squad') counts.mates = (counts.mates ?? 0) + 1
     else continue
@@ -107,7 +111,7 @@ function period(matches: MatchStats[], latestNames: Map<string, Ranked>) {
   const observed = (counts: Map<string, number>) => [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => labeled(name, count))
   return {
-    matches: matches.length, ...totals,
+    matches: matches.length, ...totals, unassigned: matches.reduce((sum, match) => sum + match.counts.unassigned, 0),
     rewards: squadRewardTemplates.map(([, kind]) => {
       const spanish = kind === 'pirate-token' ? 'Token pirata' : gizmoNames[kind]
       return labeled(spanish, rewards.get(kind) ?? null)

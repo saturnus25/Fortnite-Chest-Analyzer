@@ -43,7 +43,7 @@ React and TypeScript render the dashboard. A Rust reader compiled to WebAssembly
 Run **Abrir overlay.exe** to open the marker and its controls. Standalone mode runs the shared replay analyzer through Windows WebView2. The **Chest overlay** button in the dashboard also works while that tab remains open. In the controls, choose the replay folder, position the marker, and select the counters. You can minimize the controls while playing. The marker passes mouse input through and cannot take focus. Closing the controls closes the marker.
 
 - **Session** covers matches completed since the overlay was opened. **History** covers all matches read while the overlay has been open, including replays that Fortnite has since removed from the folder.
-- **Averages** divides each group's openings by the matches where that group could be identified. Choose recorder, teammates only, or the full squad independently. A dash means the count or average is undetermined.
+- The overlay counts chest openings and attributed breaks. Chests seen destroyed without an identified team are shown separately when the replay provides that evidence. **Averages** uses the matches where each group could be identified. Choose recorder, teammates only, or the full squad independently. A dash means the count or average is undetermined.
 - Toggle each section independently for session and history. **Treasures** distinguishes squad rewards, reward records across the replay, and observed gizmos. **Player rankings** shows the latest recorded Epic name for each verified account. Use **Ranking size** to choose 1–12 players.
 - Drag **Marker size** to scale the whole marker. **Fixed width** and **Fixed height** set its dimensions at 100%. The cards adapt to the space available.
 

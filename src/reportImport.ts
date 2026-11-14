@@ -125,14 +125,18 @@ function match(value: unknown): Result {
       const entry = obj(value)
       const detected = count(entry.detected), opened = count(entry.opened), destroyed = count(entry.destroyed)
       const destructionObserved = count(entry.destructionObserved)
+      const destroyedWithoutOpening = count(entry.destroyedWithoutOpening)
       const openedBySquad = count(entry.openedBySquad), openedByOther = count(entry.openedByOther)
       const hasAttribution = entry.openedBySquad != null || entry.openedByOther != null
       if (!type || type.length > 512 || detected == null || (opened == null ? entry.opened != null : opened > detected)
+        || (entry.destroyedWithoutOpening != null && (destroyedWithoutOpening == null || destroyed == null || destroyedWithoutOpening > destroyed))
         || (hasAttribution && (openedBySquad == null || openedByOther == null || openedBySquad + openedByOther > (opened ?? 0)))
         || destructionObserved == null || destructionObserved > detected
         || (destroyed == null ? destructionObserved !== 0 || entry.destroyed != null : destroyed > destructionObserved || destructionObserved === 0))
         throw new Error('Recuento de contenedores inválido en el informe.')
-      return [type, { detected, opened, destroyed, destructionObserved, openedBySquad: openedBySquad ?? undefined, openedByOther: openedByOther ?? undefined }]
+      return [type, { detected, opened, destroyed, destructionObserved,
+        ...(entry.destroyedWithoutOpening !== undefined ? { destroyedWithoutOpening } : {}),
+        openedBySquad: openedBySquad ?? undefined, openedByOther: openedByOther ?? undefined }]
     }))
   const schema = row.schema == null ? undefined : Object.fromEntries(Object.entries(obj(row.schema)).slice(0, 10_000)
     .map(([key, fields]) => [key, list(fields, 65_536).flatMap(field => string(field, 512) ?? [])]))

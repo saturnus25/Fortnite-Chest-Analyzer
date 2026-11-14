@@ -3,12 +3,12 @@ using System.Runtime.InteropServices;
 
 internal sealed class OverlayWindow : IDisposable
 {
-    internal sealed record RoleCounts(long? Recorder, long? Mates, long? Team);
+    internal sealed record RoleCounts(long? Recorder, long? Mates, long? Team, long Unassigned);
     internal sealed record RoleTotal(long? Total, int Games);
     internal sealed record Reward(string Spanish, string English, int? Count);
     internal sealed record Ranked(string? Name, long Opened);
     internal sealed record Period(int Matches, RoleTotal Recorder, RoleTotal Mates, RoleTotal Team, Reward[] Rewards, Ranked[] Top,
-        Reward[]? RewardRecords, Reward[]? GizmoActors);
+        Reward[]? RewardRecords, Reward[]? GizmoActors, long Unassigned);
     internal sealed record Counters(int Generation, int Found, int Unread, int Live, int Copies, int Pending, Period History, Period Session, RoleCounts? Last);
     private sealed record Scope(bool Chests, bool Average, bool Treasures, bool Top);
     private sealed record Sections(Scope History, Scope Session, bool Last, bool Status, bool Recorder, bool Mates, bool Team,
@@ -175,7 +175,7 @@ internal sealed class OverlayWindow : IDisposable
             showLast = AddOption(12, 207, "Última partida", "Last match", true);
             showStatus = AddOption(190, 207, "Estado de lectura", "Reading status", false);
             var who = new Label();
-            Localize(who, "Aperturas por jugador o equipo", "Chest openings by player or team");
+            Localize(who, "Cofres abiertos o rotos por jugador o equipo", "Chests opened or broken by player or team");
             who.SetBounds(12, 237, 446, 22);
             Controls.Add(who);
             showRecorder = AddOption(12, 259, "Grabador", "Recorder", false);
@@ -476,9 +476,12 @@ internal sealed class OverlayWindow : IDisposable
                 .. (options.Team ? new[] { new Line(T("Escuadrón", "Full squad"), team) } : []),
             ];
 
+            Line[] Unassigned(long? count) => count is > 0
+                ? [new Line(T("Rotos sin equipo", "Broken · unknown team"), Number(count))] : [];
             Card ChestCard(string label, Color color, Period? period) => new(label, color,
                 [new Line(T("Partidas", "Matches"), Number(period?.Matches)),
-                    .. Roles(Number(period?.Recorder?.Total), Number(period?.Mates?.Total), Number(period?.Team?.Total))]);
+                    .. Roles(Number(period?.Recorder?.Total), Number(period?.Mates?.Total), Number(period?.Team?.Total)),
+                    .. Unassigned(period?.Unassigned)]);
             Card AverageCard(string label, Color color, Period? period) => new(label, color,
                 Roles(Average(period?.Recorder), Average(period?.Mates), Average(period?.Team)));
             Card RewardCard(string label, Period? period)
@@ -512,7 +515,7 @@ internal sealed class OverlayWindow : IDisposable
             var half = (width - 28) / 2;
             var y = 34;
             cards.Clear();
-            title = T("▣  COFRES", "▣  CHESTS");
+            title = T("▣  COFRES ABIERTOS O ROTOS", "▣  CHESTS OPENED OR BROKEN");
 
             void AddRow(params Card?[] selected)
             {
@@ -532,7 +535,8 @@ internal sealed class OverlayWindow : IDisposable
             if (options.History.Chests) counts.Add(ChestCard(T("▤ Histórico", "▤ History"), green, snapshot?.History));
             if (options.Session.Chests) counts.Add(ChestCard(T("◷ Sesión", "◷ Session"), blue, snapshot?.Session));
             if (options.Last) counts.Add(new Card(T("↳ Última partida", "↳ Last match"), silver,
-                Roles(Number(snapshot?.Last?.Recorder), Number(snapshot?.Last?.Mates), Number(snapshot?.Last?.Team))));
+                [.. Roles(Number(snapshot?.Last?.Recorder), Number(snapshot?.Last?.Mates), Number(snapshot?.Last?.Team)),
+                    .. Unassigned(snapshot?.Last?.Unassigned)]));
             AddRow(counts.ToArray());
 
             AddRow(options.Session.Average ? AverageCard(T("≈ Media sesión", "≈ Session average"), blue, snapshot?.Session) : null,

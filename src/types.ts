@@ -32,6 +32,7 @@ export type TreasureAward = {
 }
 export type ContainerCounts = {
   detected: number; opened: number | null; destroyed: number | null; destructionObserved: number
+  destroyedWithoutOpening?: number | null
   openedBySquad?: number; openedByOther?: number
 }
 export type Analysis = {
