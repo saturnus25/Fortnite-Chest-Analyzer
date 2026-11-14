@@ -6,7 +6,7 @@ internal sealed class OverlayWindow : IDisposable
     internal sealed record RoleCounts(long? Recorder, long? Mates, long? Team, long Unassigned);
     internal sealed record RoleTotal(long? Total, int Games);
     internal sealed record Reward(string Spanish, string English, int? Count);
-    internal sealed record Ranked(string? Name, long Opened);
+    internal sealed record Ranked(string? Name, long Opened, int Games);
     internal sealed record Period(int Matches, RoleTotal Recorder, RoleTotal Mates, RoleTotal Team, Reward[] Rewards, Ranked[] Top,
         Reward[]? RewardRecords, Reward[]? GizmoActors, long Unassigned);
     internal sealed record Counters(int Generation, int Found, int Unread, int Live, int Copies, int Pending, Period History, Period Session, RoleCounts? Last);
@@ -387,7 +387,7 @@ internal sealed class OverlayWindow : IDisposable
 
     private sealed class Marker : Form
     {
-        private sealed record Line(string Label, string Value, bool Heading = false);
+        private sealed record Line(string Label, string Value, bool Heading = false, double? BarFraction = null);
         private sealed record Card(string Title, Color Accent, Line[] Lines);
         private readonly List<(Card Card, Rectangle Bounds)> cards = [];
         private Font heading = new("Segoe UI", 10, FontStyle.Bold);
@@ -504,8 +504,12 @@ internal sealed class OverlayWindow : IDisposable
             Card TopCard(string label, Period? period) => new(label, Color.FromArgb(255, 208, 112),
                 period?.Top is { Length: > 0 } ranks
                     ? ranks.Take(options.TopLimit).Select((player, index) => new Line(
-                        $"{index + 1}. {player.Name ?? T("Jugador sin nombre", "Unnamed player")}", Number(player.Opened))).ToArray()
+                        $"{index + 1}. {player.Name ?? T("Jugador sin nombre", "Unnamed player")}",
+                        $"{Number(player.Opened)} {(player.Opened == 1 ? T("cofre", "chest") : T("cofres", "chests"))} | {T("media", "avg")} {RankingAverage(player)}",
+                        BarFraction: player.Opened / (double)Math.Max(1, ranks[0].Opened))).ToArray()
                     : [new Line(T("Sin aperturas atribuidas", "No attributed openings"), "—")]);
+            string RankingAverage(Ranked player) => player.Games > 0
+                ? (player.Opened / (double)player.Games).ToString("0.#", culture) : "—";
 
             var green = Color.FromArgb(185, 240, 142);
             var blue = Color.FromArgb(133, 210, 247);
@@ -517,9 +521,9 @@ internal sealed class OverlayWindow : IDisposable
             cards.Clear();
             title = T("▣  COFRES ABIERTOS O ROTOS", "▣  CHESTS OPENED OR BROKEN");
 
-            void AddRow(params Card?[] selected)
+            void AddCards(int maxColumns, params Card?[] selected)
             {
-                foreach (var row in selected.OfType<Card>().Chunk(columns))
+                foreach (var row in selected.OfType<Card>().Chunk(maxColumns))
                 {
                     var height = 31 + Math.Max(1, row.Max(card => card.Lines.Length)) * 19;
                     for (var index = 0; index < row.Length; index++)
@@ -530,6 +534,7 @@ internal sealed class OverlayWindow : IDisposable
                     y += height + 8;
                 }
             }
+            void AddRow(params Card?[] selected) => AddCards(columns, selected);
 
             var counts = new List<Card>();
             if (options.History.Chests) counts.Add(ChestCard(T("▤ Histórico", "▤ History"), green, snapshot?.History));
@@ -543,7 +548,7 @@ internal sealed class OverlayWindow : IDisposable
                 options.History.Average ? AverageCard(T("≈ Media histórica", "≈ History average"), green, snapshot?.History) : null);
             AddRow(options.Session.Treasures ? RewardCard(T("◆ Tesoros sesión", "◆ Session treasures"), snapshot?.Session) : null,
                 options.History.Treasures ? RewardCard(T("◆ Tesoros histórico", "◆ History treasures"), snapshot?.History) : null);
-            AddRow(options.Session.Top ? TopCard(T("★ Top sesión", "★ Session rankings"), snapshot?.Session) : null,
+            AddCards(width < 600 ? 1 : columns, options.Session.Top ? TopCard(T("★ Top sesión", "★ Session rankings"), snapshot?.Session) : null,
                 options.History.Top ? TopCard(T("★ Top histórico", "★ History rankings"), snapshot?.History) : null);
             if (options.Status)
                 AddRow(new Card(T("○ Estado de lectura", "○ Reading status"), silver,
@@ -585,16 +590,39 @@ internal sealed class OverlayWindow : IDisposable
         {
             base.OnPaint(e);
             var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            var measureFlags = flags & ~TextFormatFlags.EndEllipsis;
+            var measureBounds = new Size(int.MaxValue, int.MaxValue);
             TextRenderer.DrawText(e.Graphics, title, heading, new Rectangle(X(12), Y(8), ClientSize.Width - X(24), Y(24)), ForeColor, flags);
             using var background = new SolidBrush(Color.FromArgb(30, 39, 44));
+            using var barTrack = new SolidBrush(Color.FromArgb(58, 72, 78));
             foreach (var (card, bounds) in cards)
             {
                 e.Graphics.FillRectangle(background, Scaled(bounds));
                 TextRenderer.DrawText(e.Graphics, card.Title, heading, Scaled(new Rectangle(bounds.X + 8, bounds.Y + 5, bounds.Width - 16, 22)), card.Accent, flags);
+                using var barFill = new SolidBrush(card.Accent);
+                var ranks = card.Lines.Where(line => line.BarFraction.HasValue).ToArray();
+                var innerWidth = X(bounds.Width - 16);
+                var rankingValueWidth = ranks.Length == 0 ? 0 : Math.Min(Math.Max(0, innerWidth - X(40)),
+                    ranks.Max(line => TextRenderer.MeasureText(e.Graphics, line.Value, valueFont, measureBounds, measureFlags).Width));
+                var rankingNameWidth = ranks.Length == 0 ? 0 : Math.Min(Math.Clamp(innerWidth - rankingValueWidth - X(28), 0, X((bounds.Width - 16) * 2 / 5)),
+                    ranks.Max(line => TextRenderer.MeasureText(e.Graphics, line.Label, labelFont, measureBounds, measureFlags).Width));
                 for (var index = 0; index < card.Lines.Length; index++)
                 {
                     var line = card.Lines[index];
                     var y = bounds.Y + 28 + index * 19;
+                    if (line.BarFraction is double fraction)
+                    {
+                        var left = X(bounds.X + 8);
+                        var barX = left + rankingNameWidth + X(6);
+                        var valueX = left + innerWidth - rankingValueWidth;
+                        var barWidth = Math.Max(0, valueX - barX - X(6));
+                        var barHeight = Math.Max(1, Y(4));
+                        TextRenderer.DrawText(e.Graphics, line.Label, labelFont, new Rectangle(left, Y(y), rankingNameWidth, Y(19)), ForeColor, flags);
+                        e.Graphics.FillRectangle(barTrack, barX, Y(y + 7), barWidth, barHeight);
+                        e.Graphics.FillRectangle(barFill, barX, Y(y + 7), (int)Math.Round(barWidth * fraction), barHeight);
+                        TextRenderer.DrawText(e.Graphics, line.Value, valueFont, new Rectangle(valueX, Y(y), rankingValueWidth, Y(19)), card.Accent, flags | TextFormatFlags.Right);
+                        continue;
+                    }
                     var valueWidth = line.Value.Length == 0 ? 0 : Math.Max(X(38), TextRenderer.MeasureText(line.Value, valueFont).Width);
                     TextRenderer.DrawText(e.Graphics, line.Label, line.Heading ? valueFont : labelFont, new Rectangle(X(bounds.X + 8), Y(y),
                         Math.Max(0, X(bounds.Width - 16) - valueWidth), Y(19)), line.Heading ? card.Accent : ForeColor, flags);

@@ -54,3 +54,6 @@ export function containerOf(type: string): Container {
 export const chestOpened = (opening: Opening) => opening.action === 'opened'
   && ['chest', 'poster'].includes(containerOf(opening.type).category)
 
+export const chestBroken = (opening: Opening) => opening.action === 'broken'
+  && containerOf(opening.type).category === 'chest'
+

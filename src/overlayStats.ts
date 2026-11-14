@@ -1,5 +1,5 @@
 import { gizmoNames } from './catalog'
-import { chestOpened, containerOf } from './containers'
+import { chestBroken, chestOpened, containerOf } from './containers'
 import { translate } from './locales'
 import { memberKey } from './squad'
 import { gizmoFromTemplate, squadRewardOpenings, squadRewardTemplates, treasureName } from './treasure'
@@ -51,7 +51,7 @@ function matchStats(match: Result): MatchStats {
     players.set(key, { key, name: observed?.name || member.alias || null, nameTime: start + (observed?.observedAt ?? 0) * 1000, opened: 0 })
   }
   for (const event of match.chests) {
-    const broken = event.action === 'broken' && containerOf(event.type).category === 'chest'
+    const broken = chestBroken(event)
     if (!chestOpened(event) && !broken) continue
     if (broken && event.teamRole === 'unknown') counts.unassigned++
     if (event.teamRole === 'recorder') counts.recorder = (counts.recorder ?? 0) + 1
@@ -92,7 +92,7 @@ function period(matches: MatchStats[], latestNames: Map<string, Ranked>) {
   const rewards = new Map<SquadRewardKind, number>()
   const records = new Map<string, number>()
   const actors = new Map<string, number>()
-  const players = new Map<string, Ranked>()
+  const players = new Map<string, Ranked & { games: number }>()
   for (const match of matches) {
     for (const role of roles) {
       const count = match.counts[role]
@@ -104,7 +104,8 @@ function period(matches: MatchStats[], latestNames: Map<string, Ranked>) {
     for (const [name, count] of match.records) records.set(name, (records.get(name) ?? 0) + count)
     for (const [name, count] of match.actors) actors.set(name, (actors.get(name) ?? 0) + count)
     for (const player of match.players) {
-      players.set(player.key, { ...player, opened: (players.get(player.key)?.opened ?? 0) + player.opened })
+      const previous = players.get(player.key)
+      players.set(player.key, { ...player, opened: (previous?.opened ?? 0) + player.opened, games: (previous?.games ?? 0) + 1 })
     }
   }
   const labeled = (spanish: string, count: number | null) => ({ spanish, english: translate('en', spanish), count })
@@ -121,7 +122,7 @@ function period(matches: MatchStats[], latestNames: Map<string, Ranked>) {
     top: [...players.values()].map(player => ({ ...player, name: latestNames.get(player.key)?.name ?? null }))
       .filter(player => player.opened > 0 || player.name)
       .sort((a, b) => b.opened - a.opened || (a.name ?? '').localeCompare(b.name ?? '')).slice(0, maxRankings)
-      .map(({ name, opened }) => ({ name: name ? [...name].slice(0, 24).join('') : null, opened })),
+      .map(({ name, opened, games }) => ({ name: name ? [...name].slice(0, 24).join('') : null, opened, games })),
   }
 }
 

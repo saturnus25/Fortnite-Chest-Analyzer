@@ -1,12 +1,12 @@
 import { translate } from './locales'
 import type { Language } from './locales'
-import { chestOpened } from './containers'
+import { chestBroken, chestOpened } from './containers'
 import type { EventRow } from './data'
 import type { Opening, Result, SquadMember } from './types'
 
 export type Totals = { opened: number; chestOpened: number; broken: number; fired: number; linked: number; inferred: number }
 export type ObservedName = { name: string; firstSeen: string | null; lastSeen: string | null; matches: number }
-type RosterRow = Totals & { key: string; label: string; alias?: string | null; matches: number; recorder: boolean; stable: boolean; names: ObservedName[] }
+type RosterRow = Totals & { key: string; label: string; alias?: string | null; matches: number; chestBreaks: number; recorder: boolean; stable: boolean; names: ObservedName[] }
 export const memberKey = (member: SquadMember, match: Result) => member.accountKey
   ? `cuenta:${member.accountKey}` : `partida:${match.key}:${member.playerId}`
 const blank = (): Totals => ({ opened: 0, chestOpened: 0, broken: 0, fired: 0, linked: 0, inferred: 0 })
@@ -39,14 +39,16 @@ export function squadSummary(matches: Result[], events: EventRow[], labels: Map<
   const active = new Set(matches.map(match => match.key))
   const histories = new Map<string, Map<string, ObservedName>>()
   for (const match of matches) {
+    const seen = new Set<string>()
     for (const member of match.squad ?? []) {
       const key = memberKey(member, match)
       const row = roster.get(key) ?? {
         ...blank(), key, label: labels.get(key) ?? translate(language, 'Desconocido'),
-        alias: member.alias, matches: 0, recorder: false, stable: Boolean(member.accountKey), names: [],
+        alias: member.alias, matches: 0, chestBreaks: 0, recorder: false, stable: Boolean(member.accountKey), names: [],
       }
       row.recorder ||= member.recorder
-      row.matches++
+      if (!seen.has(key)) row.matches++
+      seen.add(key)
       roster.set(key, row)
       const observed = histories.get(key) ?? new Map<string, ObservedName>()
       histories.set(key, observed)
@@ -75,6 +77,7 @@ export function squadSummary(matches: Result[], events: EventRow[], labels: Map<
     if (!member) continue
     const row = roster.get(memberKey(member, event.match))
     if (!row) continue
+    if (chestBroken(event.opening)) row.chestBreaks++
     add(row, event)
     add(totals, event)
   }

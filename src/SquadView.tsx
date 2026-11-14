@@ -1,6 +1,6 @@
 import { useI18n } from './i18n'
 import { useMemo, useState } from 'react'
-import { Activity, Gem, PackageOpen, Users } from 'lucide-react'
+import { Activity, Gem, PackageOpen, Trophy, Users } from 'lucide-react'
 import type { report } from './data'
 import { date, metricDescription, shortFile } from './format'
 import { activations, squadSummary } from './squad'
@@ -28,6 +28,8 @@ export function Squad({ data, matchKey, select, labels, onAlias }: {
     [matchKey, data.matches])
   const summary = useMemo(() => squadSummary(matches, data.events, labels, language), [matches, data.events, labels, language])
   const { totals, members, withRoster } = summary
+  const top = useMemo(() => members.map(row => ({ ...row, chests: row.chestOpened + row.chestBreaks }))
+    .sort((a, b) => b.chests - a.chests || a.label.localeCompare(b.label, language)).slice(0, 6), [members, language])
   const [sort, setSort] = useState<Sort>()
   const sortedMembers = useMemo(() => {
     if (!sort) return members
@@ -63,14 +65,21 @@ export function Squad({ data, matchKey, select, labels, onAlias }: {
       <Metric label={t('Botín vinculado al equipo')} Icon={Gem} value={count(totals.linked)} description={metricDescription.linked} />
     </div>
     <div className="charts squad-charts">
+      {top.length > 0 && <section className="panel insight squad-ranking-panel">
+        <div className="panel-title"><Trophy size={20} /><div><h3>{t('Top de cofres por jugador')}</h3>
+          <p>{t('Cofres abiertos o rotos. La media incluye todas las partidas en las que figura el jugador.')}</p></div></div>
+        <ol className="squad-ranking">
+          {top.map(row => <li key={row.key}>
+            <bdi className="ranking-name" title={row.label}>{row.label}</bdi>
+            <span className="ranking-track" aria-hidden="true"><i style={{ width: `${row.chests / (top[0].chests || 1) * 100}%` }} /></span>
+            <strong className="ranking-total">{row.chests === 1 ? t('1 cofre') : t('{count} cofres', { count: row.chests })}</strong>
+            <span className="ranking-average">{t('media {average}', { average: num(row.chests / row.matches, { maximumFractionDigits: 1 }) })}</span>
+          </li>)}
+        </ol>
+      </section>}
       <ActionChart title={t('Actividad por integrante')} subtitle={t('Los seis integrantes con más actividad en este alcance')}
         rows={[...members].sort((a, b) => activations(b) - activations(a)).slice(0, 6)
           .map(row => ({ key: row.key, label: row.label, counts: row }))} />
-      <section className="panel info-panel">
-        <div className="panel-title"><Users size={18} /><div><h3>{t('Identidad entre partidas')}</h3><p>{t('Nombres en cada grabación')}</p></div></div>
-        <p>{t('Se agrupa por cuenta. El historial conserva los nombres visibles que aparecen en las repeticiones, incluso si cambian.')}</p>
-        <p>{t('Puedes asignar un nombre local a cada cuenta estable. Pulsa Intro o sal del campo para guardarlo en este navegador.')}</p>
-      </section>
     </div>
     {members.length > 0 && <div className="squad-table-tools">
       <MetricGuide label={t('Qué significa cada columna')} entries={columns} />
@@ -96,6 +105,11 @@ export function Squad({ data, matchKey, select, labels, onAlias }: {
           </ul></details>}</td>
         {columns.map(({ key }) => <td key={key}>{num(row[key])}</td>)}
       </tr>} />
+    <section className="panel info-panel squad-identity">
+      <div className="panel-title"><Users size={18} /><div><h3>{t('Identidad entre partidas')}</h3><p>{t('Nombres en cada grabación')}</p></div></div>
+      <p>{t('Se agrupa por cuenta. El historial conserva los nombres visibles que aparecen en las repeticiones, incluso si cambian.')}</p>
+      <p>{t('Puedes asignar un nombre local a cada cuenta estable. Pulsa Intro o sal del campo para guardarlo en este navegador.')}</p>
+    </section>
   </>
 }
 

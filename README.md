@@ -38,13 +38,13 @@ React and TypeScript render the dashboard. A Rust reader compiled to WebAssembly
 
 ## Chest overlay
 
-![Chest overlay showing history, session counts, averages, treasures, and rankings with synthetic data](docs/overlay-v1.3.0.png)
+![Chest overlay showing session and historical rankings with aligned bars and per-player averages, using synthetic data](docs/overlay-v1.3.3.png)
 
 Run **Abrir overlay.exe** to open the marker and its controls. Standalone mode runs the shared replay analyzer through Windows WebView2. The **Chest overlay** button in the dashboard also works while that tab remains open. In the controls, choose the replay folder, position the marker, and select the counters. You can minimize the controls while playing. The marker passes mouse input through and cannot take focus. Closing the controls closes the marker.
 
 - **Session** covers matches completed since the overlay was opened. **History** covers all matches read while the overlay has been open, including replays that Fortnite has since removed from the folder.
 - The overlay counts chest openings and attributed breaks. Chests seen destroyed without an identified team are shown separately when the replay provides that evidence. **Averages** uses the matches where each group could be identified. Choose recorder, teammates only, or the full squad independently. A dash means the count or average is undetermined.
-- Toggle each section independently for session and history. **Treasures** distinguishes squad rewards, reward records across the replay, and observed gizmos. **Player rankings** shows the latest recorded Epic name for each verified account. Use **Ranking size** to choose 1–12 players.
+- Toggle each section independently for session and history. **Treasures** distinguishes squad rewards, reward records across the replay, and observed gizmos. **Player rankings** shows the latest recorded Epic name for each verified account, its chest total, and its average per match. Use **Ranking size** to choose 1–12 players. The dashboard also shows totals and averages in **Squad**.
 - Drag **Marker size** to scale the whole marker. **Fixed width** and **Fixed height** set its dimensions at 100%. The cards adapt to the space available.
 
 ### Reading the dashboard
